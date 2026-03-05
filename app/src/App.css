@@ -123,15 +123,36 @@ button:disabled {
   color: #94a3b8;
 }
 
+.dashboard-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
 .reset-btn {
   background: #334155;
   font-size: 0.8rem;
   padding: 6px 12px;
-  margin-left: auto;
 }
 
 .reset-btn:hover {
   background: #475569;
+}
+
+.file-picker-inline {
+  display: flex;
+  gap: 8px;
+}
+
+.file-picker-inline button {
+  background: #1e293b;
+  font-size: 0.8rem;
+  padding: 6px 12px;
+}
+
+.file-picker-inline button:hover:not(:disabled) {
+  background: #334155;
 }
 
 /* Stats cards */

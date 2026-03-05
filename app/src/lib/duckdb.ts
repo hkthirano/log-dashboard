@@ -10,6 +10,8 @@ const BUNDLES: duckdb.DuckDBBundles = {
   eh: { mainModule: ehWasm, mainWorker: ehWorker },
 }
 
+const DB_PATH = 'opfs://log-dashboard.db'
+
 let db: duckdb.AsyncDuckDB | null = null
 
 export async function getDB(): Promise<duckdb.AsyncDuckDB> {
@@ -20,7 +22,27 @@ export async function getDB(): Promise<duckdb.AsyncDuckDB> {
   const logger = new duckdb.ConsoleLogger(duckdb.LogLevel.WARNING)
   db = new duckdb.AsyncDuckDB(logger, worker)
   await db.instantiate(bundle.mainModule)
+  await db.open({
+    path: DB_PATH,
+    accessMode: duckdb.DuckDBAccessMode.READ_WRITE,
+  })
   return db
+}
+
+export async function hasExistingData(): Promise<boolean> {
+  const db = await getDB()
+  const conn = await db.connect()
+  try {
+    const result = await conn.query(
+      `SELECT COUNT(*) AS cnt FROM information_schema.tables WHERE table_name = 'logs'`,
+    )
+    const count = Number(result.toArray()[0].cnt)
+    if (count === 0) return false
+    const rows = await conn.query(`SELECT COUNT(*) AS cnt FROM logs`)
+    return Number(rows.toArray()[0].cnt) > 0
+  } finally {
+    await conn.close()
+  }
 }
 
 export async function loadLogs(entries: LogEntry[]): Promise<void> {
@@ -28,7 +50,7 @@ export async function loadLogs(entries: LogEntry[]): Promise<void> {
   const conn = await db.connect()
 
   await conn.query(`
-    CREATE OR REPLACE TABLE logs (
+    CREATE TABLE IF NOT EXISTS logs (
       ip        VARCHAR,
       identity  VARCHAR,
       "user"    VARCHAR,
@@ -68,6 +90,13 @@ export async function loadLogs(entries: LogEntry[]): Promise<void> {
     FROM read_json_auto('logs.json')
   `)
 
+  await conn.close()
+}
+
+export async function clearLogs(): Promise<void> {
+  const db = await getDB()
+  const conn = await db.connect()
+  await conn.query(`DROP TABLE IF EXISTS logs`)
   await conn.close()
 }
 

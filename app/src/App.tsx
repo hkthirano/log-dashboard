@@ -7,22 +7,24 @@ import { useDuckDB } from './hooks/useDuckDB'
 import './App.css'
 
 const STATUS_LABEL: Record<string, string> = {
-  idle: '',
+  initializing: 'データを確認中...',
   parsing: 'ログを解析中...',
   loading: 'DuckDB にロード中...',
   querying: '集計クエリ実行中...',
-  done: '',
-  error: 'エラーが発生しました',
 }
 
 export default function App() {
-  const { status, stats, error, rowCount, analyze } = useDuckDB()
+  const { status, stats, error, rowCount, analyze, clear } = useDuckDB()
   const [fileNames, setFileNames] = useState<string[]>([])
 
   function handleLoad(texts: string[], names: string[]) {
     setFileNames(names)
     analyze(texts)
   }
+
+  const isLoading = status === 'initializing' || status === 'parsing' || status === 'loading' || status === 'querying'
+  const isDone = status === 'done'
+  const isIdle = status === 'idle' || status === 'error'
 
   return (
     <div className="app">
@@ -32,19 +34,20 @@ export default function App() {
       </header>
 
       <main className="app-main">
-        {status === 'idle' || status === 'error' ? (
-          <div className="landing">
-            <FilePicker onLoad={handleLoad} disabled={false} />
-            {error && <p className="error-msg">{error}</p>}
+        {isLoading ? (
+          <div className="loading">
+            <div className="spinner" />
+            <p>{STATUS_LABEL[status]}</p>
           </div>
-        ) : status === 'done' ? (
+        ) : isDone ? (
           <div className="dashboard">
             <div className="dashboard-meta">
-              <span>{fileNames.join(', ')}</span>
+              {fileNames.length > 0 && <span>{fileNames.join(', ')}</span>}
               <span>{rowCount.toLocaleString()} 件</span>
-              <button className="reset-btn" onClick={() => { setFileNames([]); window.location.reload() }}>
-                リセット
-              </button>
+              <div className="dashboard-actions">
+                <FilePicker onLoad={handleLoad} disabled={false} label="追加読み込み" />
+                <button className="reset-btn" onClick={clear}>データを消去</button>
+              </div>
             </div>
             {stats && (
               <>
@@ -56,12 +59,12 @@ export default function App() {
               </>
             )}
           </div>
-        ) : (
-          <div className="loading">
-            <div className="spinner" />
-            <p>{STATUS_LABEL[status]}</p>
+        ) : isIdle ? (
+          <div className="landing">
+            <FilePicker onLoad={handleLoad} disabled={false} />
+            {error && <p className="error-msg">{error}</p>}
           </div>
-        )}
+        ) : null}
       </main>
     </div>
   )
