@@ -1,13 +1,21 @@
 import * as duckdb from '@duckdb/duckdb-wasm'
+import mvpWasm from '@duckdb/duckdb-wasm/dist/duckdb-mvp.wasm?url'
+import mvpWorker from '@duckdb/duckdb-wasm/dist/duckdb-browser-mvp.worker.js?url'
+import ehWasm from '@duckdb/duckdb-wasm/dist/duckdb-eh.wasm?url'
+import ehWorker from '@duckdb/duckdb-wasm/dist/duckdb-browser-eh.worker.js?url'
 import type { LogEntry } from '../types/log'
+
+const BUNDLES: duckdb.DuckDBBundles = {
+  mvp: { mainModule: mvpWasm, mainWorker: mvpWorker },
+  eh: { mainModule: ehWasm, mainWorker: ehWorker },
+}
 
 let db: duckdb.AsyncDuckDB | null = null
 
 export async function getDB(): Promise<duckdb.AsyncDuckDB> {
   if (db) return db
 
-  const bundles = duckdb.getJsDelivrBundles()
-  const bundle = await duckdb.selectBundle(bundles)
+  const bundle = await duckdb.selectBundle(BUNDLES)
   const worker = new Worker(bundle.mainWorker!)
   const logger = new duckdb.ConsoleLogger(duckdb.LogLevel.WARNING)
   db = new duckdb.AsyncDuckDB(logger, worker)
@@ -35,7 +43,6 @@ export async function loadLogs(entries: LogEntry[]): Promise<void> {
     )
   `)
 
-  // Bulk insert via arrow/json
   const rows = entries.map((e) => ({
     ip: e.ip,
     identity: e.identity,
