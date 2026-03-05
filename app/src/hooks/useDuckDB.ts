@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
 import { parseText } from '../lib/logParser'
-import { loadLogs, queryStats, hasExistingData, clearLogs } from '../lib/duckdb'
+import { loadLogs, queryStats, restoreFromOpfs, hasExistingData, clearLogs } from '../lib/duckdb'
 import type { Stats } from '../types/log'
 
 type Status = 'initializing' | 'idle' | 'parsing' | 'loading' | 'querying' | 'done' | 'error'
@@ -11,10 +11,20 @@ export function useDuckDB() {
   const [error, setError] = useState<string | null>(null)
   const [rowCount, setRowCount] = useState(0)
 
-  // 起動時に OPFS の既存データを確認
+  // 起動時に OPFS の Parquet を復元してダッシュボードを表示
   useEffect(() => {
     ;(async () => {
       try {
+        const restored = await restoreFromOpfs()
+        if (restored) {
+          setStatus('querying')
+          const result = await queryStats()
+          setStats(result)
+          setRowCount(result.totalRequests)
+          setStatus('done')
+          return
+        }
+        // OPFS 未対応の場合でもメモリ上に既存データがあれば表示
         const exists = await hasExistingData()
         if (exists) {
           setStatus('querying')
