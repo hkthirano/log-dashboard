@@ -33,6 +33,12 @@ body {
   margin-top: 4px;
 }
 
+.opfs-warning {
+  font-size: 0.8rem;
+  color: #fbbf24;
+  margin-top: 6px;
+}
+
 /* Landing */
 .landing {
   display: flex;

@@ -4,6 +4,7 @@ import { StatsCards } from './components/StatsCards'
 import { TopPaths } from './components/TopPaths'
 import { StatusChart } from './components/StatusChart'
 import { useDuckDB } from './hooks/useDuckDB'
+import { isOpfsAvailable } from './lib/duckdb'
 import './App.css'
 
 const STATUS_LABEL: Record<string, string> = {
@@ -16,6 +17,7 @@ const STATUS_LABEL: Record<string, string> = {
 export default function App() {
   const { status, stats, error, rowCount, analyze, clear } = useDuckDB()
   const [fileNames, setFileNames] = useState<string[]>([])
+  const opfsAvailable = isOpfsAvailable()
 
   function handleLoad(texts: string[], names: string[]) {
     setFileNames(names)
@@ -31,6 +33,9 @@ export default function App() {
       <header className="app-header">
         <h1>Log Dashboard</h1>
         <p className="app-subtitle">Apache アクセスログ解析ツール（ブラウザ完結）</p>
+        {!opfsAvailable && (
+          <p className="opfs-warning">⚠ このページは Cross-Origin Isolated ではないため、データはリロード後に消えます。</p>
+        )}
       </header>
 
       <main className="app-main">

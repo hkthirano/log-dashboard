@@ -14,6 +14,10 @@ const DB_PATH = 'opfs://log-dashboard.db'
 
 let db: duckdb.AsyncDuckDB | null = null
 
+export function isOpfsAvailable(): boolean {
+  return crossOriginIsolated && typeof navigator.storage?.getDirectory === 'function'
+}
+
 export async function getDB(): Promise<duckdb.AsyncDuckDB> {
   if (db) return db
 
@@ -22,14 +26,18 @@ export async function getDB(): Promise<duckdb.AsyncDuckDB> {
   const logger = new duckdb.ConsoleLogger(duckdb.LogLevel.WARNING)
   db = new duckdb.AsyncDuckDB(logger, worker)
   await db.instantiate(bundle.mainModule)
-  await db.open({
-    path: DB_PATH,
-    accessMode: duckdb.DuckDBAccessMode.READ_WRITE,
-  })
+
+  if (isOpfsAvailable()) {
+    await db.open({
+      path: DB_PATH,
+      accessMode: duckdb.DuckDBAccessMode.READ_WRITE,
+    })
+  }
   return db
 }
 
 export async function hasExistingData(): Promise<boolean> {
+  if (!isOpfsAvailable()) return false
   const db = await getDB()
   const conn = await db.connect()
   try {
@@ -90,6 +98,11 @@ export async function loadLogs(entries: LogEntry[]): Promise<void> {
     FROM read_json_auto('logs.json')
   `)
 
+  // OPFS に確実にフラッシュするため WAL をチェックポイント
+  if (isOpfsAvailable()) {
+    await conn.query(`CHECKPOINT`)
+  }
+
   await conn.close()
 }
 
@@ -97,6 +110,9 @@ export async function clearLogs(): Promise<void> {
   const db = await getDB()
   const conn = await db.connect()
   await conn.query(`DROP TABLE IF EXISTS logs`)
+  if (isOpfsAvailable()) {
+    await conn.query(`CHECKPOINT`)
+  }
   await conn.close()
 }
 
