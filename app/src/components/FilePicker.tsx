@@ -53,34 +53,39 @@ export function FilePickerDropZone({ onLoad, onWatchDir, seenHashesRef }: Omit<P
       {/* How it works */}
       <div>
         <p className="text-xs font-medium text-muted-foreground uppercase tracking-widest mb-4">How it works</p>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {STEPS.map((step, i) => (
-            <div key={i} className="relative flex flex-col items-center text-center gap-2 p-4 rounded-xl border border-border bg-card">
-              {/* Step number */}
-              <span className="absolute top-3 left-3 text-[10px] font-bold text-muted-foreground/50">{i + 1}</span>
-              {/* Arrow connector */}
-              {i < STEPS.length - 1 && (
-                <span className="hidden md:block absolute -right-2 top-1/2 -translate-y-1/2 z-10 text-muted-foreground/30">
-                  <ArrowRight size={14} />
-                </span>
-              )}
-              <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center mt-2">
-                <step.icon size={18} className="text-muted-foreground" />
+        <div className="grid grid-cols-2 md:grid-cols-[1fr_16px_1fr_16px_1fr_16px_1fr] gap-3">
+          {STEPS.flatMap((step, i) => {
+            const card = (
+              <div key={`step-${i}`} className="relative flex flex-col items-center text-center gap-2 p-4 rounded-xl border border-border bg-card">
+                {/* Step number */}
+                <span className="absolute top-3 left-3 text-[10px] font-bold text-muted-foreground/50">{i + 1}</span>
+                <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center mt-2">
+                  <step.icon size={18} className="text-muted-foreground" />
+                </div>
+                <p className="text-xs font-semibold text-foreground leading-tight">{step.title}</p>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">{step.desc}</p>
+                {step.action && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="mt-1 text-xs h-7 px-3"
+                    onClick={downloadSampleLogs}
+                  >
+                    Download ZIP
+                  </Button>
+                )}
               </div>
-              <p className="text-xs font-semibold text-foreground leading-tight">{step.title}</p>
-              <p className="text-[11px] text-muted-foreground leading-relaxed">{step.desc}</p>
-              {step.action && (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  className="mt-1 text-xs h-7 px-3"
-                  onClick={downloadSampleLogs}
-                >
-                  Download ZIP
-                </Button>
-              )}
-            </div>
-          ))}
+            )
+            if (i < STEPS.length - 1) {
+              return [
+                card,
+                <div key={`arrow-${i}`} className="hidden md:flex items-center justify-center text-muted-foreground/30">
+                  <ArrowRight size={14} />
+                </div>,
+              ]
+            }
+            return [card]
+          })}
         </div>
       </div>
 
