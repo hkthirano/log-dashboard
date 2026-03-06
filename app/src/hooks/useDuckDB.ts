@@ -1,15 +1,45 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { parseText } from '../lib/logParser'
-import { loadLogs, queryStats } from '../lib/duckdb'
+import { loadLogs, queryStats, restoreFromOpfs, hasExistingData, clearLogs } from '../lib/duckdb'
 import type { Stats } from '../types/log'
 
-type Status = 'idle' | 'parsing' | 'loading' | 'querying' | 'done' | 'error'
+type Status = 'initializing' | 'idle' | 'parsing' | 'loading' | 'querying' | 'done' | 'error'
 
 export function useDuckDB() {
-  const [status, setStatus] = useState<Status>('idle')
+  const [status, setStatus] = useState<Status>('initializing')
   const [stats, setStats] = useState<Stats | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [rowCount, setRowCount] = useState(0)
+
+  // 起動時に OPFS の Parquet を復元してダッシュボードを表示
+  useEffect(() => {
+    ;(async () => {
+      try {
+        const restored = await restoreFromOpfs()
+        if (restored) {
+          setStatus('querying')
+          const result = await queryStats()
+          setStats(result)
+          setRowCount(result.totalRequests)
+          setStatus('done')
+          return
+        }
+        // OPFS 未対応の場合でもメモリ上に既存データがあれば表示
+        const exists = await hasExistingData()
+        if (exists) {
+          setStatus('querying')
+          const result = await queryStats()
+          setStats(result)
+          setRowCount(result.totalRequests)
+          setStatus('done')
+        } else {
+          setStatus('idle')
+        }
+      } catch {
+        setStatus('idle')
+      }
+    })()
+  }, [])
 
   const analyze = useCallback(async (texts: string[]) => {
     try {
@@ -24,6 +54,7 @@ export function useDuckDB() {
       setStatus('querying')
       const result = await queryStats()
       setStats(result)
+      setRowCount(result.totalRequests)
       setStatus('done')
     } catch (e) {
       setError(String(e))
@@ -31,5 +62,16 @@ export function useDuckDB() {
     }
   }, [])
 
-  return { status, stats, error, rowCount, analyze }
+  const clear = useCallback(async () => {
+    try {
+      await clearLogs()
+      setStats(null)
+      setRowCount(0)
+      setStatus('idle')
+    } catch (e) {
+      setError(String(e))
+    }
+  }, [])
+
+  return { status, stats, error, rowCount, analyze, clear }
 }

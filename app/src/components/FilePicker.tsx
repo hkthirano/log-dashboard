@@ -1,26 +1,14 @@
 import { Button } from '@/components/ui/button'
+import { collectLogFiles } from '../lib/fsUtils'
 
 interface Props {
   onLoad: (texts: string[], fileNames: string[]) => void
+  onWatchDir?: (handle: FileSystemDirectoryHandle) => void
   disabled: boolean
   label?: string
 }
 
-async function collectLogFiles(dir: FileSystemDirectoryHandle): Promise<{ name: string; text: string }[]> {
-  const results: { name: string; text: string }[] = []
-  for await (const entry of dir.values()) {
-    if (entry.kind === 'file' && /\.(log|txt)$/i.test(entry.name)) {
-      const file = await (entry as FileSystemFileHandle).getFile()
-      results.push({ name: entry.name, text: await file.text() })
-    } else if (entry.kind === 'directory') {
-      const sub = await collectLogFiles(entry as FileSystemDirectoryHandle)
-      results.push(...sub)
-    }
-  }
-  return results
-}
-
-export function FilePicker({ onLoad, disabled, label }: Props) {
+export function FilePicker({ onLoad, onWatchDir, disabled, label }: Props) {
   async function pickFiles() {
     const handles = await window.showOpenFilePicker({
       multiple: true,
@@ -43,6 +31,7 @@ export function FilePicker({ onLoad, disabled, label }: Props) {
       return
     }
     onLoad(results.map((r) => r.text), results.map((r) => r.name))
+    onWatchDir?.(dirHandle)
   }
 
   if (label) {
