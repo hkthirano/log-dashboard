@@ -14,12 +14,12 @@ export function TopPaths({ topPaths }: Props) {
   }))
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Top Paths</CardTitle>
+    <Card className="py-3 gap-2">
+      <CardHeader className="pb-0">
+        <CardTitle className="text-sm">Top Paths</CardTitle>
       </CardHeader>
       <CardContent>
-        <ResponsiveContainer width="100%" height={Math.max(180, data.length * 36)}>
+        <ResponsiveContainer width="100%" height={Math.max(160, data.length * 28)}>
           <BarChart
             data={data}
             layout="vertical"

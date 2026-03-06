@@ -176,8 +176,8 @@ export default function App() {
   ) : null
 
   return (
-    <div className="max-w-[1200px] mx-auto px-4 py-6">
-      <header className="mb-8">
+    <div className="max-w-[1200px] mx-auto px-4 py-4">
+      <header className="mb-4">
         <h1 className="text-2xl font-bold">Log Dashboard</h1>
         <p className="text-sm text-muted-foreground mt-1">Apache access log analyzer — runs entirely in your browser</p>
         <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2">

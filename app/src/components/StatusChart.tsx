@@ -17,12 +17,12 @@ export function StatusChart({ statusCodes }: Props) {
   const data = statusCodes.map((s) => ({ name: String(s.status), value: s.count }))
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Status Codes</CardTitle>
+    <Card className="py-3 gap-2">
+      <CardHeader className="pb-0">
+        <CardTitle className="text-sm">Status Codes</CardTitle>
       </CardHeader>
       <CardContent>
-        <ResponsiveContainer width="100%" height={220}>
+        <ResponsiveContainer width="100%" height={160}>
           <PieChart>
             <Pie
               data={data}

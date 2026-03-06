@@ -10,12 +10,12 @@ export function RequestsChart({ requestsPerHour }: Props) {
   if (requestsPerHour.length === 0) return null
 
   return (
-    <Card className="mb-4">
-      <CardHeader>
-        <CardTitle>Requests per Hour</CardTitle>
+    <Card className="mb-3 py-3 gap-2">
+      <CardHeader className="pb-0">
+        <CardTitle className="text-sm">Requests per Hour</CardTitle>
       </CardHeader>
       <CardContent>
-        <ResponsiveContainer width="100%" height={220}>
+        <ResponsiveContainer width="100%" height={160}>
           <BarChart data={requestsPerHour} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#333" vertical={false} />
             <XAxis
