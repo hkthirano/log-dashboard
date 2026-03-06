@@ -10,7 +10,7 @@ import { StatusChart } from './components/StatusChart'
 import { useDuckDB } from './hooks/useDuckDB'
 import { useDirectoryWatch } from './hooks/useDirectoryWatch'
 import { isOpfsAvailable } from './lib/duckdb'
-import { exportCsv, exportPdf } from './lib/export'
+import { exportPdf } from './lib/export'
 
 export interface SkippedEntry {
   path: string
@@ -222,9 +222,6 @@ export default function App() {
                   <StatusChart statusCodes={stats.statusCodes} />
                 </div>
                 <div className="flex justify-end gap-2 mt-4">
-                  <Button variant="outline" size="sm" onClick={() => exportCsv(stats)}>
-                    CSV ダウンロード
-                  </Button>
                   <Button variant="outline" size="sm" onClick={() => exportPdf(stats)}>
                     PDF ダウンロード
                   </Button>

@@ -1,14 +1,6 @@
 import { jsPDF } from 'jspdf'
 import type { Stats } from '../types/log'
 
-function downloadBlob(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  a.click()
-  URL.revokeObjectURL(url)
-}
 
 function formatBytes(bytes: number): string {
   if (bytes >= 1_073_741_824) return `${(bytes / 1_073_741_824).toFixed(2)} GB`
@@ -17,51 +9,12 @@ function formatBytes(bytes: number): string {
   return `${bytes} B`
 }
 
-// ---- CSV ----------------------------------------------------------------
-
-export function exportCsv(stats: Stats) {
-  const lines: string[] = []
-  const now = new Date().toLocaleString('ja-JP')
-
-  lines.push('# Log Dashboard - 解析サマリー')
-  lines.push(`# 出力日時,${now}`)
-  lines.push('')
-
-  lines.push('## サマリー')
-  lines.push('項目,値')
-  lines.push(`総リクエスト数,${stats.totalRequests.toLocaleString()}`)
-  lines.push(`ユニークIP数,${stats.uniqueIps.toLocaleString()}`)
-  lines.push(`エラー率,${(stats.errorRate * 100).toFixed(1)}%`)
-  lines.push(`総転送量,${formatBytes(stats.totalBytes)}`)
-  lines.push('')
-
-  lines.push('## 上位パス')
-  lines.push('パス,リクエスト数')
-  for (const { path, count } of stats.topPaths) {
-    lines.push(`${path},${count}`)
-  }
-  lines.push('')
-
-  lines.push('## ステータスコード')
-  lines.push('ステータスコード,リクエスト数')
-  for (const { status, count } of stats.statusCodes) {
-    lines.push(`${status},${count}`)
-  }
-  lines.push('')
-
-  lines.push('## 時間帯別リクエスト数')
-  lines.push('時間帯,リクエスト数')
-  for (const { hour, count } of stats.requestsPerHour) {
-    lines.push(`${hour},${count}`)
-  }
-
-  const bom = '\uFEFF'
-  const blob = new Blob([bom + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' })
-  const filename = `log-summary-${new Date().toISOString().slice(0, 10)}.csv`
-  downloadBlob(blob, filename)
-}
-
 // ---- PDF ----------------------------------------------------------------
+// セクション順は画面と揃える:
+// 1. Summary
+// 2. Requests per Hour
+// 3. Top Paths
+// 4. Status Codes
 
 export function exportPdf(stats: Stats) {
   const doc = new jsPDF()
@@ -79,11 +32,17 @@ export function exportPdf(stats: Stats) {
     doc.setFontSize(10)
   }
 
-  const addRow = (label: string, value: string, indent = 0) => {
+  const addRow = (label: string, value: string) => {
     if (y > 275) { doc.addPage(); y = 20 }
-    doc.text(label, margin + indent, y)
+    doc.text(label, margin, y)
     doc.text(value, 120, y)
     y += 6
+  }
+
+  const addDivider = () => {
+    doc.setDrawColor(180)
+    doc.line(margin, y, 196, y)
+    y += 4
   }
 
   // Title
@@ -98,7 +57,7 @@ export function exportPdf(stats: Stats) {
   doc.setTextColor(0)
   y += 10
 
-  // Summary
+  // 1. Summary
   addSection('Summary')
   addRow('Total Requests', stats.totalRequests.toLocaleString())
   addRow('Unique IPs', stats.uniqueIps.toLocaleString())
@@ -106,35 +65,31 @@ export function exportPdf(stats: Stats) {
   addRow('Total Bytes', formatBytes(stats.totalBytes))
   y += 4
 
-  // Top Paths
+  // 2. Requests per Hour
+  addSection('Requests per Hour')
+  addRow('Hour', 'Count')
+  addDivider()
+  for (const { hour, count } of stats.requestsPerHour) {
+    addRow(hour, count.toLocaleString())
+  }
+  y += 4
+
+  // 3. Top Paths
   addSection('Top Paths')
   addRow('Path', 'Count')
-  doc.setDrawColor(180)
-  doc.line(margin, y, 196, y)
-  y += 4
+  addDivider()
   for (const { path, count } of stats.topPaths) {
     const label = path.length > 55 ? path.slice(0, 52) + '...' : path
     addRow(label, count.toLocaleString())
   }
   y += 4
 
-  // Status Codes
+  // 4. Status Codes
   addSection('Status Codes')
   addRow('Status', 'Count')
-  doc.line(margin, y, 196, y)
-  y += 4
+  addDivider()
   for (const { status, count } of stats.statusCodes) {
     addRow(String(status), count.toLocaleString())
-  }
-  y += 4
-
-  // Requests per Hour
-  addSection('Requests per Hour')
-  addRow('Hour', 'Count')
-  doc.line(margin, y, 196, y)
-  y += 4
-  for (const { hour, count } of stats.requestsPerHour) {
-    addRow(hour, count.toLocaleString())
   }
 
   const filename = `log-summary-${new Date().toISOString().slice(0, 10)}.pdf`
