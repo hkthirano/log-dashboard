@@ -48,7 +48,7 @@ export default function App() {
   const opfsAvailable = isOpfsAvailable()
 
   function handleLoad(texts: string[], paths: string[]) {
-    setAnalysisLog([{ files: paths, analyzedAt: new Date() }])
+    setAnalysisLog((prev) => [...prev, { files: paths, analyzedAt: new Date() }])
     analyze(texts)
   }
 
