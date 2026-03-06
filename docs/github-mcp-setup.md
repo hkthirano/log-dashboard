@@ -64,6 +64,26 @@ Place `.mcp.json` in the project root. No `env` entry is needed since the token 
 
 ---
 
+### ⑤ Enable the MCP server
+
+Claude Code requires explicit approval to activate each MCP server. On first use, a prompt will appear — approve it.
+
+The approval is saved to `.claude/settings.local.json`:
+
+```json
+{
+  "enabledMcpjsonServers": ["github"]
+}
+```
+
+This file is **local only** — do not commit it. Add it to `.gitignore`:
+
+```
+.claude/settings.local.json
+```
+
+---
+
 ## GitHub CLI (gh) Setup
 
 ### Install
