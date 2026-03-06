@@ -12,6 +12,7 @@ import { useDirectoryWatch } from './hooks/useDirectoryWatch'
 import { isOpfsAvailable } from './lib/duckdb'
 import { exportPdf } from './lib/export'
 import { saveWatchHandles, loadWatchHandles, clearWatchHandles } from './lib/watchHandleStore'
+import { downloadNewLog } from './lib/sampleLog'
 
 export interface SkippedEntry {
   path: string
@@ -74,39 +75,38 @@ function fmtDate(d: Date) {
 export default function App() {
   const { status, stats, error, rowCount, analyze, clear } = useDuckDB()
   const [analysisLog, setAnalysisLog] = useState<AnalysisEntry[]>(loadLog)
-  // Active monitored folder handles
-  const [watchDirHandles, setWatchDirHandles] = useState<FileSystemDirectoryHandle[]>([])
-  // Handles restored from IndexedDB that need permission re-grant
-  const [pendingHandles, setPendingHandles] = useState<FileSystemDirectoryHandle[]>([])
+  // Active monitored folder handle
+  const [watchDirHandle, setWatchDirHandle] = useState<FileSystemDirectoryHandle | null>(null)
+  // Handle restored from IndexedDB that needs permission re-grant
+  const [pendingHandle, setPendingHandle] = useState<FileSystemDirectoryHandle | null>(null)
   const seenHashesRef = useRef<Map<string, string>>(loadSeenHashes())
   const opfsAvailable = isOpfsAvailable()
 
-  // On mount: restore handles from IndexedDB and check permissions
+  // On mount: restore handle from IndexedDB and check permission
   useEffect(() => {
     loadWatchHandles().then(async (handles) => {
-      const active: FileSystemDirectoryHandle[] = []
-      const pending: FileSystemDirectoryHandle[] = []
       for (const h of handles) {
         try {
           const perm = await h.queryPermission({ mode: 'read' })
           if (perm === 'granted') {
-            active.push(h)
+            setWatchDirHandle(h)
+            return
           } else {
-            pending.push(h)
+            setPendingHandle(h)
+            return
           }
         } catch {
           // Ignore stale/invalid handles (e.g. deleted folders)
         }
       }
-      if (active.length > 0) setWatchDirHandles(active)
-      if (pending.length > 0) setPendingHandles(pending)
     })
   }, [])
 
-  // Persist handles to IndexedDB whenever they change
+  // Persist handle to IndexedDB whenever it changes
   useEffect(() => {
-    saveWatchHandles([...watchDirHandles, ...pendingHandles])
-  }, [watchDirHandles, pendingHandles])
+    const handles = [watchDirHandle, pendingHandle].filter(Boolean) as FileSystemDirectoryHandle[]
+    saveWatchHandles(handles)
+  }, [watchDirHandle, pendingHandle])
 
   function addEntry(analyzed: string[], skipped: SkippedEntry[]) {
     setAnalysisLog((prev) => [...prev, { analyzed, skipped, analyzedAt: new Date() }])
@@ -123,10 +123,8 @@ export default function App() {
   }, [analyze])
 
   function addWatchHandle(handle: FileSystemDirectoryHandle) {
-    setWatchDirHandles((prev) =>
-      prev.some((h) => h.name === handle.name) ? prev : [...prev, handle],
-    )
-    setPendingHandles((prev) => prev.filter((h) => h.name !== handle.name))
+    setWatchDirHandle(handle)
+    setPendingHandle(null)
   }
 
   async function handleReconnect(handle: FileSystemDirectoryHandle) {
@@ -138,14 +136,14 @@ export default function App() {
     }
   }
 
-  function handleRemoveWatch(name: string) {
-    setWatchDirHandles((prev) => prev.filter((h) => h.name !== name))
-    setPendingHandles((prev) => prev.filter((h) => h.name !== name))
+  function handleRemoveWatch() {
+    setWatchDirHandle(null)
+    setPendingHandle(null)
   }
 
   function handleClear() {
-    setWatchDirHandles([])
-    setPendingHandles([])
+    setWatchDirHandle(null)
+    setPendingHandle(null)
     setAnalysisLog([])
     seenHashesRef.current.clear()
     localStorage.removeItem(HASHES_KEY)
@@ -161,30 +159,25 @@ export default function App() {
     localStorage.setItem(HASHES_KEY, JSON.stringify([...seenHashesRef.current]))
   }, [analysisLog])
 
-  useDirectoryWatch(watchDirHandles, seenHashesRef, handleNewFiles)
+  useDirectoryWatch(watchDirHandle, seenHashesRef, handleNewFiles)
 
   const isLoading = ['initializing', 'parsing', 'loading', 'querying'].includes(status)
   const isDone = status === 'done'
   const isIdle = status === 'idle' || status === 'error'
 
-  const watchBadges = (
-    <>
-      {watchDirHandles.map((h) => (
-        <Badge key={h.name} variant="outline" className="text-green-400 border-green-800 bg-green-950 gap-1.5">
-          <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-          {h.name}
-          <button onClick={() => handleRemoveWatch(h.name)} className="ml-0.5 opacity-60 hover:opacity-100 leading-none" aria-label={`Stop monitoring ${h.name}`}>×</button>
-        </Badge>
-      ))}
-      {pendingHandles.map((h) => (
-        <Badge key={h.name} variant="outline" className="text-yellow-400 border-yellow-800 bg-yellow-950 gap-1.5 cursor-pointer hover:bg-yellow-900" onClick={() => handleReconnect(h)}>
-          <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
-          Reconnect: {h.name}
-          <button onClick={(e) => { e.stopPropagation(); handleRemoveWatch(h.name) }} className="ml-0.5 opacity-60 hover:opacity-100 leading-none" aria-label={`Remove ${h.name}`}>×</button>
-        </Badge>
-      ))}
-    </>
-  )
+  const watchBadge = watchDirHandle ? (
+    <Badge variant="outline" className="text-green-400 border-green-800 bg-green-950 gap-1.5">
+      <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+      {watchDirHandle.name}
+      <button onClick={handleRemoveWatch} className="ml-0.5 opacity-60 hover:opacity-100 leading-none" aria-label={`Stop monitoring ${watchDirHandle.name}`}>×</button>
+    </Badge>
+  ) : pendingHandle ? (
+    <Badge variant="outline" className="text-yellow-400 border-yellow-800 bg-yellow-950 gap-1.5 cursor-pointer hover:bg-yellow-900" onClick={() => handleReconnect(pendingHandle)}>
+      <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
+      Reconnect: {pendingHandle.name}
+      <button onClick={(e) => { e.stopPropagation(); handleRemoveWatch() }} className="ml-0.5 opacity-60 hover:opacity-100 leading-none" aria-label={`Remove ${pendingHandle.name}`}>×</button>
+    </Badge>
+  ) : null
 
   return (
     <div className="max-w-[1200px] mx-auto px-4 py-6">
@@ -212,13 +205,22 @@ export default function App() {
           <div>
             <div className="flex items-center gap-2 mb-4 text-sm text-muted-foreground flex-wrap">
               <span className="mr-1">{rowCount.toLocaleString()} requests</span>
-              {watchBadges}
+              {watchBadge}
               <div className="ml-auto flex items-center gap-2">
                 <FilePicker onLoad={handleLoad} onWatchDir={addWatchHandle} seenHashesRef={seenHashesRef} />
                 <Button variant="secondary" size="sm" onClick={handleClear}>Clear data</Button>
                 <Button variant="outline" size="sm" onClick={() => exportPdf(stats!)}>Download PDF</Button>
               </div>
             </div>
+
+            {watchDirHandle && (
+              <div className="flex items-center gap-2 mb-4 p-3 rounded-lg border border-border bg-card text-xs text-muted-foreground flex-wrap">
+                <Button variant="outline" size="sm" className="h-6 text-xs px-2 shrink-0" onClick={downloadNewLog}>
+                  Download new log
+                </Button>
+                <span>Move it into <span className="font-mono text-foreground">{watchDirHandle.name}/</span> — it will be picked up automatically within 10 seconds.</span>
+              </div>
+            )}
 
             {analysisLog.length > 0 && (
               <Card className="mb-4">
@@ -272,22 +274,17 @@ export default function App() {
           </div>
         ) : isIdle ? (
           <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6">
-            {pendingHandles.length > 0 && (
+            {pendingHandle && (
               <div className="flex flex-col items-center gap-3">
-                <p className="text-sm text-muted-foreground">Re-grant access to previously monitored folders</p>
-                <div className="flex gap-2 flex-wrap justify-center">
-                  {pendingHandles.map((h) => (
-                    <Badge
-                      key={h.name}
-                      variant="outline"
-                      className="text-yellow-400 border-yellow-800 bg-yellow-950 gap-1.5 cursor-pointer hover:bg-yellow-900 px-3 py-1.5 text-sm"
-                      onClick={() => handleReconnect(h)}
-                    >
-                      <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
-                      Reconnect: {h.name}
-                    </Badge>
-                  ))}
-                </div>
+                <p className="text-sm text-muted-foreground">Re-grant access to previously monitored folder</p>
+                <Badge
+                  variant="outline"
+                  className="text-yellow-400 border-yellow-800 bg-yellow-950 gap-1.5 cursor-pointer hover:bg-yellow-900 px-3 py-1.5 text-sm"
+                  onClick={() => handleReconnect(pendingHandle)}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
+                  Reconnect: {pendingHandle.name}
+                </Badge>
               </div>
             )}
             <FilePickerDropZone onLoad={handleLoad} onWatchDir={addWatchHandle} seenHashesRef={seenHashesRef} />

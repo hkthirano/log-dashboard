@@ -2,7 +2,7 @@ import type { RefObject } from 'react'
 import { FolderOpen, BarChart2, RefreshCw, Download, ArrowRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { collectLogFiles } from '../lib/fsUtils'
-import { downloadSampleLog } from '../lib/sampleLog'
+import { downloadSampleLogs } from '../lib/sampleLog'
 import type { SkippedEntry } from '../App'
 
 interface Props {
@@ -48,18 +48,18 @@ export function FilePicker({ onLoad, onWatchDir, seenHashesRef, label = 'Add fol
   )
 }
 
-// Step card shown on the idle / empty screen
+// Step cards shown on the idle / empty screen
 const STEPS = [
   {
     icon: Download,
     title: 'Get sample data',
-    desc: 'Download a sample Apache log file to try the app instantly.',
+    desc: 'Download a ZIP with sample log files. Extract it to a folder on your device.',
     action: true,
   },
   {
     icon: FolderOpen,
-    title: 'Select a folder',
-    desc: 'Choose a folder containing .log or .txt Apache access log files.',
+    title: 'Select the folder',
+    desc: 'Pick the extracted folder. All .log and .txt files inside will be analyzed.',
   },
   {
     icon: BarChart2,
@@ -100,9 +100,9 @@ export function FilePickerDropZone({ onLoad, onWatchDir, seenHashesRef }: Omit<P
                   variant="secondary"
                   size="sm"
                   className="mt-1 text-xs h-7 px-3"
-                  onClick={downloadSampleLog}
+                  onClick={downloadSampleLogs}
                 >
-                  Download sample
+                  Download ZIP
                 </Button>
               )}
             </div>
