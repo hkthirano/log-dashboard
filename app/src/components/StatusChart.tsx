@@ -19,7 +19,7 @@ export function StatusChart({ statusCodes }: Props) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>ステータスコード</CardTitle>
+        <CardTitle>Status Codes</CardTitle>
       </CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={220}>
@@ -41,7 +41,7 @@ export function StatusChart({ statusCodes }: Props) {
               contentStyle={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: 6, fontSize: 12 }}
               labelStyle={{ color: '#ccc' }}
               itemStyle={{ color: '#ccc' }}
-              formatter={(value: number | undefined) => [(value ?? 0).toLocaleString(), 'リクエスト数']}
+              formatter={(value: number | undefined) => [(value ?? 0).toLocaleString(), 'Requests']}
             />
             <Legend
               iconType="circle"

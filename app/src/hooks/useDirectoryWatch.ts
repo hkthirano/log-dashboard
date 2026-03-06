@@ -19,7 +19,7 @@ export function useDirectoryWatch(
       return
     }
 
-    // 初回スキャン: 既存ファイルを「既読」としてマーク（再解析しない）
+    // Initial scan: mark existing files as seen so they are not re-analyzed
     for (const dirHandle of dirHandles) {
       collectLogFiles(dirHandle).then((files) => {
         files.forEach((f) =>

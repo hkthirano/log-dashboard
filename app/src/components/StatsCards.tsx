@@ -20,10 +20,10 @@ export function StatsCards({ stats }: Props) {
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
       {[
-        { label: '総リクエスト', value: fmt(stats.totalRequests) },
-        { label: 'ユニーク IP', value: fmt(stats.uniqueIps) },
-        { label: 'エラー率', value: `${stats.errorRate}%` },
-        { label: '転送量', value: fmtBytes(stats.totalBytes) },
+        { label: 'Total Requests', value: fmt(stats.totalRequests) },
+        { label: 'Unique IPs', value: fmt(stats.uniqueIps) },
+        { label: 'Error Rate', value: `${stats.errorRate}%` },
+        { label: 'Data Transferred', value: fmtBytes(stats.totalBytes) },
       ].map(({ label, value }) => (
         <Card key={label}>
           <CardContent className="pt-6">

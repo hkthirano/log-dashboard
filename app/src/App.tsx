@@ -40,7 +40,7 @@ function loadLog(): AnalysisEntry[] {
     ).map((e) => ({
       analyzed: e.analyzed ?? [],
       skipped: (e.skipped ?? []).map((s) =>
-        typeof s === 'string' ? { path: s, duplicateOf: '不明' } : s,
+        typeof s === 'string' ? { path: s, duplicateOf: 'unknown' } : s,
       ),
       analyzedAt: new Date(e.analyzedAt),
     }))
@@ -49,6 +49,7 @@ function loadLog(): AnalysisEntry[] {
   }
 }
 
+// Map<hash, filePath> — tracks content hashes to deduplicate files
 function loadSeenHashes(): Map<string, string> {
   try {
     const raw = localStorage.getItem(HASHES_KEY)
@@ -60,25 +61,27 @@ function loadSeenHashes(): Map<string, string> {
 }
 
 const STATUS_LABEL: Record<string, string> = {
-  initializing: 'データを確認中...',
-  parsing: 'ログを解析中...',
-  loading: 'DuckDB にロード中...',
-  querying: '集計クエリ実行中...',
+  initializing: 'Initializing...',
+  parsing: 'Parsing logs...',
+  loading: 'Loading into DuckDB...',
+  querying: 'Running queries...',
 }
 
 function fmtDate(d: Date) {
-  return d.toLocaleString('ja-JP', { dateStyle: 'short', timeStyle: 'medium' })
+  return d.toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'medium' })
 }
 
 export default function App() {
   const { status, stats, error, rowCount, analyze, clear } = useDuckDB()
   const [analysisLog, setAnalysisLog] = useState<AnalysisEntry[]>(loadLog)
+  // Active monitored folder handles
   const [watchDirHandles, setWatchDirHandles] = useState<FileSystemDirectoryHandle[]>([])
+  // Handles restored from IndexedDB that need permission re-grant
   const [pendingHandles, setPendingHandles] = useState<FileSystemDirectoryHandle[]>([])
   const seenHashesRef = useRef<Map<string, string>>(loadSeenHashes())
   const opfsAvailable = isOpfsAvailable()
 
-  // 起動時: IndexedDB からハンドルを復元し権限チェック
+  // On mount: restore handles from IndexedDB and check permissions
   useEffect(() => {
     loadWatchHandles().then(async (handles) => {
       const active: FileSystemDirectoryHandle[] = []
@@ -92,7 +95,7 @@ export default function App() {
             pending.push(h)
           }
         } catch {
-          // 無効なハンドルは無視
+          // Ignore stale/invalid handles (e.g. deleted folders)
         }
       }
       if (active.length > 0) setWatchDirHandles(active)
@@ -100,7 +103,7 @@ export default function App() {
     })
   }, [])
 
-  // watchDirHandles / pendingHandles が変わったら IndexedDB に保存
+  // Persist handles to IndexedDB whenever they change
   useEffect(() => {
     saveWatchHandles([...watchDirHandles, ...pendingHandles])
   }, [watchDirHandles, pendingHandles])
@@ -131,7 +134,7 @@ export default function App() {
       const perm = await handle.requestPermission({ mode: 'read' })
       if (perm === 'granted') addWatchHandle(handle)
     } catch {
-      // ユーザーキャンセル → 何もしない
+      // User cancelled — do nothing
     }
   }
 
@@ -170,14 +173,14 @@ export default function App() {
         <Badge key={h.name} variant="outline" className="text-green-400 border-green-800 bg-green-950 gap-1.5">
           <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
           {h.name}
-          <button onClick={() => handleRemoveWatch(h.name)} className="ml-0.5 opacity-60 hover:opacity-100 leading-none" aria-label={`${h.name} の監視を解除`}>×</button>
+          <button onClick={() => handleRemoveWatch(h.name)} className="ml-0.5 opacity-60 hover:opacity-100 leading-none" aria-label={`Stop monitoring ${h.name}`}>×</button>
         </Badge>
       ))}
       {pendingHandles.map((h) => (
         <Badge key={h.name} variant="outline" className="text-yellow-400 border-yellow-800 bg-yellow-950 gap-1.5 cursor-pointer hover:bg-yellow-900" onClick={() => handleReconnect(h)}>
           <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
-          再接続: {h.name}
-          <button onClick={(e) => { e.stopPropagation(); handleRemoveWatch(h.name) }} className="ml-0.5 opacity-60 hover:opacity-100 leading-none" aria-label={`${h.name} を削除`}>×</button>
+          Reconnect: {h.name}
+          <button onClick={(e) => { e.stopPropagation(); handleRemoveWatch(h.name) }} className="ml-0.5 opacity-60 hover:opacity-100 leading-none" aria-label={`Remove ${h.name}`}>×</button>
         </Badge>
       ))}
     </>
@@ -187,10 +190,14 @@ export default function App() {
     <div className="max-w-[1200px] mx-auto px-4 py-6">
       <header className="mb-8">
         <h1 className="text-2xl font-bold">Log Dashboard</h1>
-        <p className="text-sm text-muted-foreground mt-1">Apache アクセスログ解析ツール（ブラウザ完結）</p>
+        <p className="text-sm text-muted-foreground mt-1">Apache access log analyzer — runs entirely in your browser</p>
+        <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2">
+          <p className="text-xs text-muted-foreground">Your files are never uploaded — all analysis happens locally.</p>
+          <p className="text-xs text-muted-foreground">Analyzed data is stored in your browser, so reloading the page is safe.</p>
+        </div>
         {!opfsAvailable && (
           <p className="text-yellow-500 text-xs mt-2">
-            ⚠ Cross-Origin Isolated ではないため、データはリロード後に消えます。
+            ⚠ Not Cross-Origin Isolated — data will be lost on page reload.
           </p>
         )}
       </header>
@@ -204,21 +211,22 @@ export default function App() {
         ) : isDone ? (
           <div>
             <div className="flex items-center gap-2 mb-4 text-sm text-muted-foreground flex-wrap">
-              <span className="mr-1">{rowCount.toLocaleString()} 件</span>
+              <span className="mr-1">{rowCount.toLocaleString()} requests</span>
               {watchBadges}
               <div className="ml-auto flex items-center gap-2">
                 <FilePicker onLoad={handleLoad} onWatchDir={addWatchHandle} seenHashesRef={seenHashesRef} />
-                <Button variant="secondary" size="sm" onClick={handleClear}>データを消去</Button>
-                <Button variant="outline" size="sm" onClick={() => exportPdf(stats!)}>PDF ダウンロード</Button>
+                <Button variant="secondary" size="sm" onClick={handleClear}>Clear data</Button>
+                <Button variant="outline" size="sm" onClick={() => exportPdf(stats!)}>Download PDF</Button>
               </div>
             </div>
 
             {analysisLog.length > 0 && (
               <Card className="mb-4">
                 <CardContent className="pt-4 pb-3">
-                  <p className="text-xs font-medium text-muted-foreground mb-3">解析ログ</p>
+                  <p className="text-xs font-medium text-muted-foreground mb-3">Analysis log</p>
                   <div className="flex flex-col gap-3 max-h-48 overflow-y-auto">
                     {(() => {
+                      // Assign sequential IDs to analyzed files across all entries
                       const fileIds = new Map<string, number>()
                       let counter = 0
                       for (const entry of analysisLog) {
@@ -238,7 +246,7 @@ export default function App() {
                               return (
                                 <li key={s.path} className="text-xs font-mono text-muted-foreground pl-3">
                                   {s.path}
-                                  <span className="text-yellow-600 ml-1">（スキップ: #{dupId} と同一）</span>
+                                  <span className="text-yellow-600 ml-1">(skipped: same content as #{dupId})</span>
                                 </li>
                               )
                             })}
@@ -266,7 +274,7 @@ export default function App() {
           <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6">
             {pendingHandles.length > 0 && (
               <div className="flex flex-col items-center gap-3">
-                <p className="text-sm text-muted-foreground">前回の監視フォルダへのアクセス権限を再付与してください</p>
+                <p className="text-sm text-muted-foreground">Re-grant access to previously monitored folders</p>
                 <div className="flex gap-2 flex-wrap justify-center">
                   {pendingHandles.map((h) => (
                     <Badge
@@ -276,7 +284,7 @@ export default function App() {
                       onClick={() => handleReconnect(h)}
                     >
                       <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
-                      再接続: {h.name}
+                      Reconnect: {h.name}
                     </Badge>
                   ))}
                 </div>

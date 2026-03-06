@@ -1,6 +1,6 @@
 export interface FileEntry {
   name: string
-  path: string  // フォルダ内の相対パス (例: subdir/access.log)
+  path: string  // relative path within the folder (e.g. subdir/access.log)
   text: string
   lastModified: number
   hash: string  // SHA-256 of file content (hex string)

@@ -11,7 +11,7 @@ export function useDuckDB() {
   const [error, setError] = useState<string | null>(null)
   const [rowCount, setRowCount] = useState(0)
 
-  // 起動時に OPFS の Parquet を復元してダッシュボードを表示
+  // On startup: restore Parquet from OPFS and display the dashboard
   useEffect(() => {
     ;(async () => {
       try {
@@ -24,7 +24,7 @@ export function useDuckDB() {
           setStatus('done')
           return
         }
-        // OPFS 未対応の場合でもメモリ上に既存データがあれば表示
+        // Even without OPFS, display if data already exists in memory
         const exists = await hasExistingData()
         if (exists) {
           setStatus('querying')
