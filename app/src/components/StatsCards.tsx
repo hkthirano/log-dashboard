@@ -1,3 +1,4 @@
+import { Card, CardContent } from '@/components/ui/card'
 import type { Stats } from '../types/log'
 
 function fmt(n: number) {
@@ -17,23 +18,20 @@ interface Props {
 
 export function StatsCards({ stats }: Props) {
   return (
-    <div className="stats-cards">
-      <div className="stat-card">
-        <div className="stat-label">総リクエスト</div>
-        <div className="stat-value">{fmt(stats.totalRequests)}</div>
-      </div>
-      <div className="stat-card">
-        <div className="stat-label">ユニーク IP</div>
-        <div className="stat-value">{fmt(stats.uniqueIps)}</div>
-      </div>
-      <div className="stat-card">
-        <div className="stat-label">エラー率</div>
-        <div className="stat-value">{stats.errorRate}%</div>
-      </div>
-      <div className="stat-card">
-        <div className="stat-label">転送量</div>
-        <div className="stat-value">{fmtBytes(stats.totalBytes)}</div>
-      </div>
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      {[
+        { label: '総リクエスト', value: fmt(stats.totalRequests) },
+        { label: 'ユニーク IP', value: fmt(stats.uniqueIps) },
+        { label: 'エラー率', value: `${stats.errorRate}%` },
+        { label: '転送量', value: fmtBytes(stats.totalBytes) },
+      ].map(({ label, value }) => (
+        <Card key={label}>
+          <CardContent className="pt-6">
+            <p className="text-sm text-muted-foreground mb-1">{label}</p>
+            <p className="text-2xl font-bold">{value}</p>
+          </CardContent>
+        </Card>
+      ))}
     </div>
   )
 }

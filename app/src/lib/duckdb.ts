@@ -10,7 +10,14 @@ const BUNDLES: duckdb.DuckDBBundles = {
   eh: { mainModule: ehWasm, mainWorker: ehWorker },
 }
 
+const OPFS_FILENAME = 'logs.parquet'
+const DUCKDB_PARQUET_PATH = 'opfs_logs.parquet'
+
 let db: duckdb.AsyncDuckDB | null = null
+
+export function isOpfsAvailable(): boolean {
+  return typeof navigator.storage?.getDirectory === 'function'
+}
 
 export async function getDB(): Promise<duckdb.AsyncDuckDB> {
   if (db) return db
@@ -23,12 +30,67 @@ export async function getDB(): Promise<duckdb.AsyncDuckDB> {
   return db
 }
 
+// OPFS からログを読み込んで DuckDB に復元する
+export async function restoreFromOpfs(): Promise<boolean> {
+  if (!isOpfsAvailable()) return false
+  try {
+    const root = await navigator.storage.getDirectory()
+    const fh = await root.getFileHandle(OPFS_FILENAME)
+    const file = await fh.getFile()
+    const buffer = new Uint8Array(await file.arrayBuffer())
+    if (buffer.byteLength === 0) return false
+
+    const db = await getDB()
+    await db.registerFileBuffer(DUCKDB_PARQUET_PATH, buffer)
+    const conn = await db.connect()
+    await conn.query(`CREATE OR REPLACE TABLE logs AS SELECT * FROM read_parquet('${DUCKDB_PARQUET_PATH}')`)
+    await conn.close()
+    return true
+  } catch {
+    return false
+  }
+}
+
+// DuckDB の logs テーブルを Parquet にエクスポートして OPFS に保存する
+async function saveToOpfs(): Promise<void> {
+  if (!isOpfsAvailable()) return
+  const db = await getDB()
+  const conn = await db.connect()
+  await conn.query(`COPY logs TO '${DUCKDB_PARQUET_PATH}' (FORMAT PARQUET)`)
+  await conn.close()
+
+  const shared = await db.copyFileToBuffer(DUCKDB_PARQUET_PATH)
+  // SharedArrayBuffer → ArrayBuffer にコピー（FileSystemWritableFileStream は SAB を受け付けない）
+  const buffer = shared.slice().buffer as ArrayBuffer
+  const root = await navigator.storage.getDirectory()
+  const fh = await root.getFileHandle(OPFS_FILENAME, { create: true })
+  const writable = await fh.createWritable()
+  await writable.write(buffer)
+  await writable.close()
+}
+
+export async function hasExistingData(): Promise<boolean> {
+  const db = await getDB()
+  const conn = await db.connect()
+  try {
+    const result = await conn.query(
+      `SELECT COUNT(*) AS cnt FROM information_schema.tables WHERE table_name = 'logs'`,
+    )
+    const count = Number(result.toArray()[0].cnt)
+    if (count === 0) return false
+    const rows = await conn.query(`SELECT COUNT(*) AS cnt FROM logs`)
+    return Number(rows.toArray()[0].cnt) > 0
+  } finally {
+    await conn.close()
+  }
+}
+
 export async function loadLogs(entries: LogEntry[]): Promise<void> {
   const db = await getDB()
   const conn = await db.connect()
 
   await conn.query(`
-    CREATE OR REPLACE TABLE logs (
+    CREATE TABLE IF NOT EXISTS logs (
       ip        VARCHAR,
       identity  VARCHAR,
       "user"    VARCHAR,
@@ -60,15 +122,29 @@ export async function loadLogs(entries: LogEntry[]): Promise<void> {
   await db.registerFileText('logs.json', JSON.stringify(rows))
   await conn.query(`
     INSERT INTO logs
-    SELECT
-      ip, identity, "user",
-      ts::TIMESTAMP,
-      method, path, protocol,
-      status, bytes, referer, user_agent
+    SELECT ip, identity, "user", ts::TIMESTAMP, method, path, protocol,
+           status, bytes, referer, user_agent
     FROM read_json_auto('logs.json')
   `)
-
   await conn.close()
+
+  await saveToOpfs()
+}
+
+export async function clearLogs(): Promise<void> {
+  const db = await getDB()
+  const conn = await db.connect()
+  await conn.query(`DROP TABLE IF EXISTS logs`)
+  await conn.close()
+
+  if (isOpfsAvailable()) {
+    try {
+      const root = await navigator.storage.getDirectory()
+      await root.removeEntry(OPFS_FILENAME)
+    } catch {
+      // ファイルが存在しない場合は無視
+    }
+  }
 }
 
 export async function queryStats() {
