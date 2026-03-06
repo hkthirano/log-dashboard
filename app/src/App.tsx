@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
-import { FilePicker, FilePickerDropZone } from './components/FilePicker'
+import { FilePickerDropZone } from './components/FilePicker'
 import { StatsCards } from './components/StatsCards'
 import { RequestsChart } from './components/RequestsChart'
 import { TopPaths } from './components/TopPaths'
@@ -207,7 +207,6 @@ export default function App() {
               <span className="mr-1">{rowCount.toLocaleString()} requests</span>
               {watchBadge}
               <div className="ml-auto flex items-center gap-2">
-                <FilePicker onLoad={handleLoad} onWatchDir={addWatchHandle} seenHashesRef={seenHashesRef} />
                 <Button variant="secondary" size="sm" onClick={handleClear}>Clear data</Button>
                 <Button variant="outline" size="sm" onClick={() => exportPdf(stats!)}>Download PDF</Button>
               </div>
