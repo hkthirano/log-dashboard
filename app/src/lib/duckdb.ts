@@ -44,7 +44,26 @@ export async function restoreFromOpfs(): Promise<boolean> {
     await db.registerFileBuffer(DUCKDB_PARQUET_PATH, buffer)
     const conn = await db.connect()
     await conn.query(`CREATE OR REPLACE TABLE logs AS SELECT * FROM read_parquet('${DUCKDB_PARQUET_PATH}')`)
-    await conn.close()
+
+    // Migrate old TIMESTAMP column to BIGINT (epoch ms) if needed
+    const colInfo = await conn.query(
+      `SELECT data_type FROM information_schema.columns WHERE table_name = 'logs' AND column_name = 'ts'`
+    )
+    const colType = colInfo.toArray()[0]?.data_type as string | undefined
+    if (colType && colType.toUpperCase().startsWith('TIMESTAMP')) {
+      await conn.query(`
+        CREATE OR REPLACE TABLE logs AS
+          SELECT ip, identity, "user",
+                 epoch_ms(ts)::BIGINT AS ts,
+                 method, path, protocol, status, bytes, referer, user_agent
+          FROM logs
+      `)
+      await conn.close()
+      await saveToOpfs()
+    } else {
+      await conn.close()
+    }
+
     return true
   } catch {
     return false
@@ -94,7 +113,7 @@ export async function loadLogs(entries: LogEntry[]): Promise<void> {
       ip        VARCHAR,
       identity  VARCHAR,
       "user"    VARCHAR,
-      ts        TIMESTAMP,
+      ts        BIGINT,
       method    VARCHAR,
       path      VARCHAR,
       protocol  VARCHAR,
@@ -109,7 +128,7 @@ export async function loadLogs(entries: LogEntry[]): Promise<void> {
     ip: e.ip,
     identity: e.identity,
     user: e.user,
-    ts: isNaN(e.timestamp.getTime()) ? null : e.timestamp.toISOString().replace('T', ' ').slice(0, 23),
+    ts: isNaN(e.timestamp.getTime()) ? null : e.timestamp.getTime(),
     method: e.method,
     path: e.path,
     protocol: e.protocol,
@@ -122,7 +141,7 @@ export async function loadLogs(entries: LogEntry[]): Promise<void> {
   await db.registerFileText('logs.json', JSON.stringify(rows))
   await conn.query(`
     INSERT INTO logs
-    SELECT ip, identity, "user", ts::TIMESTAMP, method, path, protocol,
+    SELECT ip, identity, "user", CAST(ts AS BIGINT), method, path, protocol,
            status, bytes, referer, user_agent
     FROM read_json_auto('logs.json')
   `)
@@ -174,7 +193,7 @@ export async function queryStats() {
       ORDER BY status
     `),
     conn.query(`
-      SELECT strftime(ts, '%Y-%m-%d %H:00') AS hour, COUNT(*) AS cnt
+      SELECT strftime(epoch_ms(ts), '%Y-%m-%d %H:00') AS hour, COUNT(*) AS cnt
       FROM logs
       WHERE ts IS NOT NULL
       GROUP BY hour
