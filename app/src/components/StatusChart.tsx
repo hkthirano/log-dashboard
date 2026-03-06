@@ -1,3 +1,4 @@
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import type { Stats } from '../types/log'
 
 interface Props {
@@ -14,27 +15,34 @@ function statusColor(s: number) {
 export function StatusChart({ statusCodes }: Props) {
   const total = statusCodes.reduce((a, b) => a + b.count, 0)
   return (
-    <div className="panel">
-      <h2>ステータスコード</h2>
-      <div className="status-bar">
-        {statusCodes.map((s) => (
-          <div
-            key={s.status}
-            className="status-segment"
-            style={{ width: `${(s.count / total) * 100}%`, background: statusColor(s.status) }}
-            title={`${s.status}: ${s.count.toLocaleString()}`}
-          />
-        ))}
-      </div>
-      <div className="status-legend">
-        {statusCodes.map((s) => (
-          <div key={s.status} className="legend-item">
-            <span className="legend-dot" style={{ background: statusColor(s.status) }} />
-            <span>{s.status}</span>
-            <span className="legend-count">{s.count.toLocaleString()}</span>
-          </div>
-        ))}
-      </div>
-    </div>
+    <Card>
+      <CardHeader>
+        <CardTitle>ステータスコード</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="flex h-4 rounded-full overflow-hidden mb-4">
+          {statusCodes.map((s) => (
+            <div
+              key={s.status}
+              className="h-full min-w-[2px] transition-opacity hover:opacity-80"
+              style={{ width: `${(s.count / total) * 100}%`, background: statusColor(s.status) }}
+              title={`${s.status}: ${s.count.toLocaleString()}`}
+            />
+          ))}
+        </div>
+        <div className="flex flex-col gap-1.5">
+          {statusCodes.map((s) => (
+            <div key={s.status} className="flex items-center gap-2 text-sm">
+              <span
+                className="w-2.5 h-2.5 rounded-full shrink-0"
+                style={{ background: statusColor(s.status) }}
+              />
+              <span>{s.status}</span>
+              <span className="ml-auto text-muted-foreground">{s.count.toLocaleString()}</span>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
   )
 }

@@ -1,3 +1,5 @@
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import type { Stats } from '../types/log'
 
 interface Props {
@@ -7,30 +9,37 @@ interface Props {
 export function TopPaths({ topPaths }: Props) {
   const max = topPaths[0]?.count ?? 1
   return (
-    <div className="panel">
-      <h2>上位 URL</h2>
-      <table className="data-table">
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>パス</th>
-            <th>リクエスト数</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {topPaths.map((row, i) => (
-            <tr key={row.path}>
-              <td>{i + 1}</td>
-              <td className="path-cell">{row.path}</td>
-              <td>{row.count.toLocaleString()}</td>
-              <td>
-                <div className="bar" style={{ width: `${(row.count / max) * 100}%` }} />
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <Card>
+      <CardHeader>
+        <CardTitle>上位 URL</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-8">#</TableHead>
+              <TableHead>パス</TableHead>
+              <TableHead className="text-right">リクエスト数</TableHead>
+              <TableHead className="w-32"></TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {topPaths.map((row, i) => (
+              <TableRow key={row.path}>
+                <TableCell className="text-muted-foreground">{i + 1}</TableCell>
+                <TableCell className="font-mono max-w-xs truncate">{row.path}</TableCell>
+                <TableCell className="text-right">{row.count.toLocaleString()}</TableCell>
+                <TableCell>
+                  <div
+                    className="h-1.5 bg-primary rounded-full"
+                    style={{ width: `${(row.count / max) * 100}%` }}
+                  />
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
   )
 }
