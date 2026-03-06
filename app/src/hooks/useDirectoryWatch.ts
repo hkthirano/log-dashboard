@@ -1,43 +1,71 @@
-import { useEffect, useRef } from 'react'
+import { type RefObject, useEffect, useRef } from 'react'
 import { collectLogFiles } from '../lib/fsUtils'
+import type { SkippedEntry } from '../App'
 
 const POLL_INTERVAL_MS = 10_000
 
 export function useDirectoryWatch(
-  dirHandle: FileSystemDirectoryHandle | null,
-  onNewFiles: (texts: string[], names: string[]) => void,
+  dirHandles: FileSystemDirectoryHandle[],
+  seenHashesRef: RefObject<Map<string, string>>,
+  onNewFiles: (texts: string[], names: string[], skipped: SkippedEntry[]) => void,
 ) {
-  const seenRef = useRef<Map<string, number>>(new Map())
+  const seenModifiedRef = useRef<Map<string, number>>(new Map())
   const callbackRef = useRef(onNewFiles)
-  callbackRef.current = onNewFiles
+  useEffect(() => { callbackRef.current = onNewFiles }, [onNewFiles])
 
   useEffect(() => {
-    if (!dirHandle) {
-      seenRef.current.clear()
+    if (dirHandles.length === 0) {
+      seenModifiedRef.current.clear()
       return
     }
 
     // 初回スキャン: 既存ファイルを「既読」としてマーク（再解析しない）
-    collectLogFiles(dirHandle).then((files) => {
-      files.forEach((f) => seenRef.current.set(f.name, f.lastModified))
-    })
+    for (const dirHandle of dirHandles) {
+      collectLogFiles(dirHandle).then((files) => {
+        files.forEach((f) =>
+          seenModifiedRef.current.set(`${dirHandle.name}/${f.path}`, f.lastModified),
+        )
+      })
+    }
 
     const poll = async () => {
-      const files = await collectLogFiles(dirHandle)
-      const newFiles = files.filter((f) => {
-        const prev = seenRef.current.get(f.name)
-        return prev === undefined || prev < f.lastModified
-      })
-      if (newFiles.length > 0) {
-        newFiles.forEach((f) => seenRef.current.set(f.name, f.lastModified))
-        callbackRef.current(
-          newFiles.map((f) => f.text),
-          newFiles.map((f) => f.name),
+      const allTexts: string[] = []
+      const allNames: string[] = []
+      const allSkipped: SkippedEntry[] = []
+
+      for (const dirHandle of dirHandles) {
+        const files = await collectLogFiles(dirHandle)
+        const changedFiles = files.filter((f) => {
+          const key = `${dirHandle.name}/${f.path}`
+          const prev = seenModifiedRef.current.get(key)
+          return prev === undefined || prev < f.lastModified
+        })
+        if (changedFiles.length === 0) continue
+
+        changedFiles.forEach((f) =>
+          seenModifiedRef.current.set(`${dirHandle.name}/${f.path}`, f.lastModified),
         )
+        const seen = seenHashesRef.current
+        const newFiles = changedFiles.filter((f) => !seen.has(f.hash))
+        const skippedFiles: SkippedEntry[] = changedFiles
+          .filter((f) => seen.has(f.hash))
+          .map((f) => ({
+            path: `${dirHandle.name}/${f.path}`,
+            duplicateOf: seen.get(f.hash)!,
+          }))
+        newFiles.forEach((f) => seen.set(f.hash, `${dirHandle.name}/${f.path}`))
+
+        allTexts.push(...newFiles.map((f) => f.text))
+        allNames.push(...newFiles.map((f) => `${dirHandle.name}/${f.path}`))
+        allSkipped.push(...skippedFiles)
+      }
+
+      if (allTexts.length > 0 || allSkipped.length > 0) {
+        callbackRef.current(allTexts, allNames, allSkipped)
       }
     }
 
     const id = setInterval(poll, POLL_INTERVAL_MS)
     return () => clearInterval(id)
-  }, [dirHandle])
+  }, [dirHandles, seenHashesRef])
 }

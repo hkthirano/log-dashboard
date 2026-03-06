@@ -1,13 +1,63 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Card, CardContent } from '@/components/ui/card'
 import { FilePicker } from './components/FilePicker'
 import { StatsCards } from './components/StatsCards'
+import { RequestsChart } from './components/RequestsChart'
 import { TopPaths } from './components/TopPaths'
 import { StatusChart } from './components/StatusChart'
 import { useDuckDB } from './hooks/useDuckDB'
 import { useDirectoryWatch } from './hooks/useDirectoryWatch'
 import { isOpfsAvailable } from './lib/duckdb'
+import { exportCsv, exportPdf } from './lib/export'
+
+export interface SkippedEntry {
+  path: string
+  duplicateOf: string
+}
+
+interface AnalysisEntry {
+  analyzed: string[]
+  skipped: SkippedEntry[]
+  analyzedAt: Date
+}
+
+const STORAGE_KEY = 'log-dashboard:analysis-log'
+const HASHES_KEY = 'log-dashboard:seen-hashes'
+
+function loadLog(): AnalysisEntry[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return []
+    return (
+      JSON.parse(raw) as {
+        analyzed: string[]
+        skipped: (SkippedEntry | string)[]
+        analyzedAt: string
+      }[]
+    ).map((e) => ({
+      analyzed: e.analyzed ?? [],
+      skipped: (e.skipped ?? []).map((s) =>
+        typeof s === 'string' ? { path: s, duplicateOf: '不明' } : s,
+      ),
+      analyzedAt: new Date(e.analyzedAt),
+    }))
+  } catch {
+    return []
+  }
+}
+
+// Map<hash, filePath> — hash で重複検知し、値として初回解析時のパスを保持
+function loadSeenHashes(): Map<string, string> {
+  try {
+    const raw = localStorage.getItem(HASHES_KEY)
+    if (!raw) return new Map()
+    return new Map(JSON.parse(raw) as [string, string][])
+  } catch {
+    return new Map()
+  }
+}
 
 const STATUS_LABEL: Record<string, string> = {
   initializing: 'データを確認中...',
@@ -16,28 +66,61 @@ const STATUS_LABEL: Record<string, string> = {
   querying: '集計クエリ実行中...',
 }
 
+function fmtDate(d: Date) {
+  return d.toLocaleString('ja-JP', { dateStyle: 'short', timeStyle: 'medium' })
+}
+
 export default function App() {
   const { status, stats, error, rowCount, analyze, clear } = useDuckDB()
-  const [fileNames, setFileNames] = useState<string[]>([])
-  const [watchDirHandle, setWatchDirHandle] = useState<FileSystemDirectoryHandle | null>(null)
+  const [analysisLog, setAnalysisLog] = useState<AnalysisEntry[]>(loadLog)
+  const [watchDirHandles, setWatchDirHandles] = useState<FileSystemDirectoryHandle[]>([])
+  const seenHashesRef = useRef<Map<string, string>>(loadSeenHashes())
   const opfsAvailable = isOpfsAvailable()
 
-  function handleLoad(texts: string[], names: string[]) {
-    setFileNames(names)
-    analyze(texts)
+  function addEntry(analyzed: string[], skipped: SkippedEntry[]) {
+    setAnalysisLog((prev) => [...prev, { analyzed, skipped, analyzedAt: new Date() }])
   }
 
-  const handleNewFiles = useCallback((texts: string[], names: string[]) => {
-    setFileNames((prev) => [...new Set([...prev, ...names])])
-    analyze(texts)
+  function handleLoad(texts: string[], paths: string[], skipped: SkippedEntry[]) {
+    addEntry(paths, skipped)
+    if (texts.length > 0) analyze(texts)
+  }
+
+  const handleNewFiles = useCallback((texts: string[], paths: string[], skipped: SkippedEntry[]) => {
+    addEntry(paths, skipped)
+    if (texts.length > 0) analyze(texts)
   }, [analyze])
 
+  async function handleAddWatch() {
+    const dirHandle = await window.showDirectoryPicker()
+    setWatchDirHandles((prev) => {
+      // 同名フォルダの重複追加を防ぐ
+      if (prev.some((h) => h.name === dirHandle.name)) return prev
+      return [...prev, dirHandle]
+    })
+  }
+
+  function handleRemoveWatch(name: string) {
+    setWatchDirHandles((prev) => prev.filter((h) => h.name !== name))
+  }
+
   function handleClear() {
-    setWatchDirHandle(null)
+    setWatchDirHandles([])
+    setAnalysisLog([])
+    seenHashesRef.current.clear()
+    localStorage.removeItem(HASHES_KEY)
     clear()
   }
 
-  useDirectoryWatch(watchDirHandle, handleNewFiles)
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(analysisLog))
+  }, [analysisLog])
+
+  useEffect(() => {
+    localStorage.setItem(HASHES_KEY, JSON.stringify([...seenHashesRef.current]))
+  }, [analysisLog])
+
+  useDirectoryWatch(watchDirHandles, seenHashesRef, handleNewFiles)
 
   const isLoading = ['initializing', 'parsing', 'loading', 'querying'].includes(status)
   const isDone = status === 'done'
@@ -63,35 +146,95 @@ export default function App() {
           </div>
         ) : isDone ? (
           <div>
-            <div className="flex items-center gap-3 mb-5 text-sm text-muted-foreground flex-wrap">
-              {fileNames.length > 0 && <span>{fileNames.join(', ')}</span>}
+            <div className="flex items-center gap-3 mb-4 text-sm text-muted-foreground flex-wrap">
               <span>{rowCount.toLocaleString()} 件</span>
-              {watchDirHandle && (
-                <Badge variant="outline" className="text-green-400 border-green-800 bg-green-950 gap-1.5">
+              {watchDirHandles.map((h) => (
+                <Badge key={h.name} variant="outline" className="text-green-400 border-green-800 bg-green-950 gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-                  監視中（10秒ごと）
+                  監視中: {h.name}
+                  <button
+                    onClick={() => handleRemoveWatch(h.name)}
+                    className="ml-0.5 opacity-60 hover:opacity-100 leading-none"
+                    aria-label={`${h.name} の監視を解除`}
+                  >
+                    ×
+                  </button>
                 </Badge>
-              )}
+              ))}
               <div className="ml-auto flex items-center gap-2">
-                <FilePicker onLoad={handleLoad} onWatchDir={setWatchDirHandle} disabled={false} label="追加読み込み" />
+                <FilePicker onLoad={handleLoad} onWatchDir={(h) => setWatchDirHandles((prev) => prev.some((p) => p.name === h.name) ? prev : [...prev, h])} disabled={false} label="追加読み込み" seenHashesRef={seenHashesRef} />
+                <Button variant="outline" size="sm" onClick={handleAddWatch}>
+                  監視フォルダを追加
+                </Button>
                 <Button variant="secondary" size="sm" onClick={handleClear}>
                   データを消去
                 </Button>
               </div>
             </div>
+
+            {analysisLog.length > 0 && (
+              <Card className="mb-4">
+                <CardContent className="pt-4 pb-3">
+                  <p className="text-xs font-medium text-muted-foreground mb-3">解析ログ</p>
+                  <div className="flex flex-col gap-3 max-h-48 overflow-y-auto">
+                    {(() => {
+                      // 全エントリを通じて解析済みファイルに連番を付与
+                      const fileIds = new Map<string, number>()
+                      let counter = 0
+                      for (const entry of analysisLog) {
+                        for (const f of entry.analyzed) fileIds.set(f, ++counter)
+                      }
+                      return analysisLog.map((entry, i) => (
+                        <div key={i}>
+                          <p className="text-xs text-muted-foreground tabular-nums mb-1">{fmtDate(entry.analyzedAt)}</p>
+                          <ul className="flex flex-col gap-0.5">
+                            {entry.analyzed.map((f) => (
+                              <li key={f} className="text-xs font-mono text-foreground/80 pl-3">
+                                <span className="text-muted-foreground mr-1.5">#{fileIds.get(f)}</span>{f}
+                              </li>
+                            ))}
+                            {entry.skipped.map((s) => {
+                              const dupId = fileIds.get(s.duplicateOf)
+                              return (
+                                <li key={s.path} className="text-xs font-mono text-muted-foreground pl-3">
+                                  {s.path}
+                                  <span className="text-yellow-600 ml-1">
+                                    （スキップ: #{dupId} と同一）
+                                  </span>
+                                </li>
+                              )
+                            })}
+                          </ul>
+                        </div>
+                      ))
+                    })()}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {stats && (
               <>
                 <StatsCards stats={stats} />
+                <RequestsChart requestsPerHour={stats.requestsPerHour} />
                 <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr] gap-4">
                   <TopPaths topPaths={stats.topPaths} />
                   <StatusChart statusCodes={stats.statusCodes} />
+                </div>
+                <div className="flex justify-end gap-2 mt-4">
+                  <Button variant="outline" size="sm" onClick={() => exportCsv(stats)}>
+                    CSV ダウンロード
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => exportPdf(stats)}>
+                    PDF ダウンロード
+                  </Button>
                 </div>
               </>
             )}
           </div>
         ) : isIdle ? (
           <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
-            <FilePicker onLoad={handleLoad} onWatchDir={setWatchDirHandle} disabled={false} />
+            <FilePicker onLoad={handleLoad} onWatchDir={(h) => setWatchDirHandles((prev) => prev.some((p) => p.name === h.name) ? prev : [...prev, h])} disabled={false} seenHashesRef={seenHashesRef} />
             {error && <p className="text-destructive text-sm">{error}</p>}
           </div>
         ) : null}
