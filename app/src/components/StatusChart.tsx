@@ -40,6 +40,7 @@ export function StatusChart({ statusCodes }: Props) {
             <Tooltip
               contentStyle={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: 6, fontSize: 12 }}
               labelStyle={{ color: '#ccc' }}
+              itemStyle={{ color: '#ccc' }}
               formatter={(value: number | undefined) => [(value ?? 0).toLocaleString(), 'リクエスト数']}
             />
             <Legend
