@@ -155,7 +155,7 @@ export default function App() {
     localStorage.setItem(HASHES_KEY, JSON.stringify([...seenHashesRef.current]))
   }, [analysisLog])
 
-  const { countdown } = useDirectoryWatch(watchDirHandle, seenHashesRef, handleNewFiles)
+  useDirectoryWatch(watchDirHandle, seenHashesRef, handleNewFiles)
 
   const isLoading = ['initializing', 'parsing', 'loading', 'querying'].includes(status)
   const isDone = status === 'done'
@@ -165,7 +165,6 @@ export default function App() {
     <Badge variant="outline" className="text-green-400 border-green-800 bg-green-950 gap-1.5">
       <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
       {watchDirHandle.name}
-      <span className="text-green-600 tabular-nums">{countdown}s</span>
       <button onClick={handleRemoveWatch} className="ml-0.5 opacity-60 hover:opacity-100 leading-none" aria-label={`Stop monitoring ${watchDirHandle.name}`}>×</button>
     </Badge>
   ) : pendingHandle ? (

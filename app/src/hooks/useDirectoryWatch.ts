@@ -1,20 +1,16 @@
-import { type RefObject, useEffect, useRef, useState } from 'react'
+import { type RefObject, useEffect, useRef } from 'react'
 import { collectLogFiles } from '../lib/fsUtils'
 import type { SkippedEntry } from '../App'
 
 const POLL_INTERVAL_MS = 10_000
-const POLL_INTERVAL_S = POLL_INTERVAL_MS / 1000
 
 export function useDirectoryWatch(
   dirHandle: FileSystemDirectoryHandle | null,
   seenHashesRef: RefObject<Map<string, string>>,
   onNewFiles: (texts: string[], names: string[], skipped: SkippedEntry[]) => void,
-): { countdown: number } {
+) {
   const seenModifiedRef = useRef<Map<string, number>>(new Map())
   const callbackRef = useRef(onNewFiles)
-  const lastPollAtRef = useRef(0)
-  const [countdown, setCountdown] = useState(POLL_INTERVAL_S)
-
   useEffect(() => { callbackRef.current = onNewFiles }, [onNewFiles])
 
   useEffect(() => {
@@ -30,14 +26,7 @@ export function useDirectoryWatch(
       )
     })
 
-    // Ref mutation is fine in effect body
-    lastPollAtRef.current = Date.now()
-
     const poll = async () => {
-      // setState inside async callback — not a synchronous effect setState
-      lastPollAtRef.current = Date.now()
-      setCountdown(POLL_INTERVAL_S)
-
       const files = await collectLogFiles(dirHandle)
       const changedFiles = files.filter((f) => {
         const key = `${dirHandle.name}/${f.path}`
@@ -68,18 +57,7 @@ export function useDirectoryWatch(
       }
     }
 
-    const pollId = setInterval(poll, POLL_INTERVAL_MS)
-    // Tick every second to update the countdown display
-    const tickId = setInterval(() => {
-      const elapsed = Math.floor((Date.now() - lastPollAtRef.current) / 1000)
-      setCountdown(Math.max(0, POLL_INTERVAL_S - elapsed))
-    }, 1000)
-
-    return () => {
-      clearInterval(pollId)
-      clearInterval(tickId)
-    }
+    const id = setInterval(poll, POLL_INTERVAL_MS)
+    return () => clearInterval(id)
   }, [dirHandle, seenHashesRef])
-
-  return { countdown }
 }
