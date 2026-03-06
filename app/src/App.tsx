@@ -141,7 +141,7 @@ export default function App() {
               {watchDirHandle && (
                 <Badge variant="outline" className="text-green-400 border-green-800 bg-green-950 gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-                  監視中（10秒ごと）
+                  監視中: {watchDirHandle.name}（10秒ごと）
                 </Badge>
               )}
               <div className="ml-auto flex items-center gap-2">
