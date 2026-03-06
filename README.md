@@ -2,6 +2,16 @@
 
 A browser-based Apache access log analyzer. No server required — everything runs locally in your browser.
 
+## Screenshots
+
+### Top screen
+
+![Top screen](docs/screenshots/top.png)
+
+### Dashboard (data display)
+
+![Dashboard](docs/screenshots/dashboard.png)
+
 ## Demo
 
 https://white-river-02cd2e900.4.azurestaticapps.net/
