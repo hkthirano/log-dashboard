@@ -9,20 +9,6 @@ interface Props {
 }
 
 export function FilePicker({ onLoad, onWatchDir, disabled, label }: Props) {
-  async function pickFiles() {
-    const handles = await window.showOpenFilePicker({
-      multiple: true,
-      types: [{ description: 'Log files', accept: { 'text/plain': ['.log', '.txt'] } }],
-    })
-    const results = await Promise.all(
-      handles.map(async (h) => {
-        const file = await h.getFile()
-        return { name: file.name, text: await file.text() }
-      }),
-    )
-    onLoad(results.map((r) => r.text), results.map((r) => r.name))
-  }
-
   async function pickDirectory() {
     const dirHandle = await window.showDirectoryPicker()
     const results = await collectLogFiles(dirHandle)
@@ -36,24 +22,16 @@ export function FilePicker({ onLoad, onWatchDir, disabled, label }: Props) {
 
   if (label) {
     return (
-      <div className="flex gap-2">
-        <Button variant="outline" size="sm" onClick={pickFiles} disabled={disabled}>
-          {label}（ファイル）
-        </Button>
-        <Button variant="outline" size="sm" onClick={pickDirectory} disabled={disabled}>
-          {label}（フォルダ）
-        </Button>
-      </div>
+      <Button variant="outline" size="sm" onClick={pickDirectory} disabled={disabled}>
+        {label}
+      </Button>
     )
   }
 
   return (
     <div className="border-2 border-dashed border-border rounded-xl p-12 text-center">
-      <p className="text-muted-foreground mb-5 text-sm">Apache アクセスログを選択してください</p>
-      <div className="flex gap-3 justify-center">
-        <Button onClick={pickFiles} disabled={disabled}>ファイルを選択</Button>
-        <Button variant="outline" onClick={pickDirectory} disabled={disabled}>フォルダを選択</Button>
-      </div>
+      <p className="text-muted-foreground mb-5 text-sm">Apache アクセスログのフォルダを選択してください</p>
+      <Button onClick={pickDirectory} disabled={disabled}>フォルダを選択</Button>
     </div>
   )
 }
