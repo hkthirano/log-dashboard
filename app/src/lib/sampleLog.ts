@@ -53,8 +53,10 @@ function formatDate(d: Date): string {
   return `${pad(d.getDate())}/${months[d.getMonth()]}/${d.getFullYear()}:${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())} +0000`
 }
 
-function isoDate(ms: number): string {
-  return new Date(ms).toISOString().slice(0, 10)
+function isoDateTime(ms: number): string {
+  const d = new Date(ms)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`
 }
 
 export function generateSampleLog(lines = 300, startMs?: number, endMs?: number): string {
@@ -91,9 +93,9 @@ export function downloadSampleLogs(): void {
   const day = 24 * 60 * 60 * 1000
   const enc = new TextEncoder()
   const files: Record<string, Uint8Array> = {
-    [`access-${isoDate(now - 3 * day)}.log`]: enc.encode(generateSampleLog(200, now - 3 * day, now - 2 * day)),
-    [`access-${isoDate(now - 2 * day)}.log`]: enc.encode(generateSampleLog(250, now - 2 * day, now - 1 * day)),
-    [`access-${isoDate(now - 1 * day)}.log`]: enc.encode(generateSampleLog(300, now - 1 * day, now)),
+    [`access-${isoDateTime(now - 3 * day)}.log`]: enc.encode(generateSampleLog(200, now - 3 * day, now - 2 * day)),
+    [`access-${isoDateTime(now - 2 * day)}.log`]: enc.encode(generateSampleLog(250, now - 2 * day, now - 1 * day)),
+    [`access-${isoDateTime(now - 1 * day)}.log`]: enc.encode(generateSampleLog(300, now - 1 * day, now)),
   }
   const zipped = zipSync(files)
   downloadBlob(new Blob([zipped.buffer as ArrayBuffer], { type: 'application/zip' }), 'sample-logs.zip')
