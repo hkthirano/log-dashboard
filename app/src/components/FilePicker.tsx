@@ -20,7 +20,7 @@ async function pickAndLoad(
   onWatchDir: Props['onWatchDir'],
   requireFiles = false,
 ) {
-  const dirHandle = await window.showDirectoryPicker()
+  const dirHandle = await window.showDirectoryPicker({ startIn: 'downloads' })
   const results = await collectLogFiles(dirHandle)
   if (requireFiles && results.length === 0) {
     alert('No .log / .txt files found in folder')
