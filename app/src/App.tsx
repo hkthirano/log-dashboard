@@ -57,6 +57,11 @@ export default function App() {
     analyze(texts)
   }, [analyze])
 
+  async function handleSetWatch() {
+    const dirHandle = await window.showDirectoryPicker()
+    setWatchDirHandle(dirHandle)
+  }
+
   function handleClear() {
     setWatchDirHandle(null)
     setAnalysisLog([])
@@ -103,6 +108,9 @@ export default function App() {
               )}
               <div className="ml-auto flex items-center gap-2">
                 <FilePicker onLoad={handleLoad} onWatchDir={setWatchDirHandle} disabled={false} label="追加読み込み" />
+                <Button variant="outline" size="sm" onClick={handleSetWatch}>
+                  監視フォルダを設定
+                </Button>
                 <Button variant="secondary" size="sm" onClick={handleClear}>
                   データを消去
                 </Button>
