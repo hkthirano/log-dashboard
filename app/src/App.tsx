@@ -71,7 +71,7 @@ function fmtDate(d: Date) {
 export default function App() {
   const { status, stats, error, rowCount, analyze, clear } = useDuckDB()
   const [analysisLog, setAnalysisLog] = useState<AnalysisEntry[]>(loadLog)
-  const [watchDirHandle, setWatchDirHandle] = useState<FileSystemDirectoryHandle | null>(null)
+  const [watchDirHandles, setWatchDirHandles] = useState<FileSystemDirectoryHandle[]>([])
   const seenHashesRef = useRef<Map<string, string>>(loadSeenHashes())
   const opfsAvailable = isOpfsAvailable()
 
@@ -89,13 +89,21 @@ export default function App() {
     if (texts.length > 0) analyze(texts)
   }, [analyze])
 
-  async function handleSetWatch() {
+  async function handleAddWatch() {
     const dirHandle = await window.showDirectoryPicker()
-    setWatchDirHandle(dirHandle)
+    setWatchDirHandles((prev) => {
+      // 同名フォルダの重複追加を防ぐ
+      if (prev.some((h) => h.name === dirHandle.name)) return prev
+      return [...prev, dirHandle]
+    })
+  }
+
+  function handleRemoveWatch(name: string) {
+    setWatchDirHandles((prev) => prev.filter((h) => h.name !== name))
   }
 
   function handleClear() {
-    setWatchDirHandle(null)
+    setWatchDirHandles([])
     setAnalysisLog([])
     seenHashesRef.current.clear()
     localStorage.removeItem(HASHES_KEY)
@@ -110,7 +118,7 @@ export default function App() {
     localStorage.setItem(HASHES_KEY, JSON.stringify([...seenHashesRef.current]))
   }, [analysisLog])
 
-  useDirectoryWatch(watchDirHandle, seenHashesRef, handleNewFiles)
+  useDirectoryWatch(watchDirHandles, seenHashesRef, handleNewFiles)
 
   const isLoading = ['initializing', 'parsing', 'loading', 'querying'].includes(status)
   const isDone = status === 'done'
@@ -138,16 +146,23 @@ export default function App() {
           <div>
             <div className="flex items-center gap-3 mb-4 text-sm text-muted-foreground flex-wrap">
               <span>{rowCount.toLocaleString()} 件</span>
-              {watchDirHandle && (
-                <Badge variant="outline" className="text-green-400 border-green-800 bg-green-950 gap-1.5">
+              {watchDirHandles.map((h) => (
+                <Badge key={h.name} variant="outline" className="text-green-400 border-green-800 bg-green-950 gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-                  監視中: {watchDirHandle.name}（10秒ごと）
+                  監視中: {h.name}
+                  <button
+                    onClick={() => handleRemoveWatch(h.name)}
+                    className="ml-0.5 opacity-60 hover:opacity-100 leading-none"
+                    aria-label={`${h.name} の監視を解除`}
+                  >
+                    ×
+                  </button>
                 </Badge>
-              )}
+              ))}
               <div className="ml-auto flex items-center gap-2">
-                <FilePicker onLoad={handleLoad} onWatchDir={setWatchDirHandle} disabled={false} label="追加読み込み" seenHashesRef={seenHashesRef} />
-                <Button variant="outline" size="sm" onClick={handleSetWatch}>
-                  監視フォルダを設定
+                <FilePicker onLoad={handleLoad} onWatchDir={(h) => setWatchDirHandles((prev) => prev.some((p) => p.name === h.name) ? prev : [...prev, h])} disabled={false} label="追加読み込み" seenHashesRef={seenHashesRef} />
+                <Button variant="outline" size="sm" onClick={handleAddWatch}>
+                  監視フォルダを追加
                 </Button>
                 <Button variant="secondary" size="sm" onClick={handleClear}>
                   データを消去
@@ -208,7 +223,7 @@ export default function App() {
           </div>
         ) : isIdle ? (
           <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
-            <FilePicker onLoad={handleLoad} onWatchDir={setWatchDirHandle} disabled={false} seenHashesRef={seenHashesRef} />
+            <FilePicker onLoad={handleLoad} onWatchDir={(h) => setWatchDirHandles((prev) => prev.some((p) => p.name === h.name) ? prev : [...prev, h])} disabled={false} seenHashesRef={seenHashesRef} />
             {error && <p className="text-destructive text-sm">{error}</p>}
           </div>
         ) : null}

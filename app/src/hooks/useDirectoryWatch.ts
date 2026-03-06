@@ -5,7 +5,7 @@ import type { SkippedEntry } from '../App'
 const POLL_INTERVAL_MS = 10_000
 
 export function useDirectoryWatch(
-  dirHandle: FileSystemDirectoryHandle | null,
+  dirHandles: FileSystemDirectoryHandle[],
   seenHashesRef: RefObject<Map<string, string>>,
   onNewFiles: (texts: string[], names: string[], skipped: SkippedEntry[]) => void,
 ) {
@@ -14,24 +14,37 @@ export function useDirectoryWatch(
   useEffect(() => { callbackRef.current = onNewFiles }, [onNewFiles])
 
   useEffect(() => {
-    if (!dirHandle) {
+    if (dirHandles.length === 0) {
       seenModifiedRef.current.clear()
       return
     }
 
     // 初回スキャン: 既存ファイルを「既読」としてマーク（再解析しない）
-    collectLogFiles(dirHandle).then((files) => {
-      files.forEach((f) => seenModifiedRef.current.set(f.path, f.lastModified))
-    })
+    for (const dirHandle of dirHandles) {
+      collectLogFiles(dirHandle).then((files) => {
+        files.forEach((f) =>
+          seenModifiedRef.current.set(`${dirHandle.name}/${f.path}`, f.lastModified),
+        )
+      })
+    }
 
     const poll = async () => {
-      const files = await collectLogFiles(dirHandle)
-      const changedFiles = files.filter((f) => {
-        const prev = seenModifiedRef.current.get(f.path)
-        return prev === undefined || prev < f.lastModified
-      })
-      if (changedFiles.length > 0) {
-        changedFiles.forEach((f) => seenModifiedRef.current.set(f.path, f.lastModified))
+      const allTexts: string[] = []
+      const allNames: string[] = []
+      const allSkipped: SkippedEntry[] = []
+
+      for (const dirHandle of dirHandles) {
+        const files = await collectLogFiles(dirHandle)
+        const changedFiles = files.filter((f) => {
+          const key = `${dirHandle.name}/${f.path}`
+          const prev = seenModifiedRef.current.get(key)
+          return prev === undefined || prev < f.lastModified
+        })
+        if (changedFiles.length === 0) continue
+
+        changedFiles.forEach((f) =>
+          seenModifiedRef.current.set(`${dirHandle.name}/${f.path}`, f.lastModified),
+        )
         const seen = seenHashesRef.current
         const newFiles = changedFiles.filter((f) => !seen.has(f.hash))
         const skippedFiles: SkippedEntry[] = changedFiles
@@ -41,15 +54,18 @@ export function useDirectoryWatch(
             duplicateOf: seen.get(f.hash)!,
           }))
         newFiles.forEach((f) => seen.set(f.hash, `${dirHandle.name}/${f.path}`))
-        callbackRef.current(
-          newFiles.map((f) => f.text),
-          newFiles.map((f) => `${dirHandle.name}/${f.path}`),
-          skippedFiles,
-        )
+
+        allTexts.push(...newFiles.map((f) => f.text))
+        allNames.push(...newFiles.map((f) => `${dirHandle.name}/${f.path}`))
+        allSkipped.push(...skippedFiles)
+      }
+
+      if (allTexts.length > 0 || allSkipped.length > 0) {
+        callbackRef.current(allTexts, allNames, allSkipped)
       }
     }
 
     const id = setInterval(poll, POLL_INTERVAL_MS)
     return () => clearInterval(id)
-  }, [dirHandle, seenHashesRef])
+  }, [dirHandles, seenHashesRef])
 }
