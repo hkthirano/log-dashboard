@@ -10,9 +10,14 @@ import { useDuckDB } from './hooks/useDuckDB'
 import { useDirectoryWatch } from './hooks/useDirectoryWatch'
 import { isOpfsAvailable } from './lib/duckdb'
 
+export interface SkippedEntry {
+  path: string
+  duplicateOf: string
+}
+
 interface AnalysisEntry {
   analyzed: string[]
-  skipped: string[]
+  skipped: SkippedEntry[]
   analyzedAt: Date
 }
 
@@ -23,9 +28,17 @@ function loadLog(): AnalysisEntry[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return []
-    return (JSON.parse(raw) as { analyzed: string[]; skipped: string[]; analyzedAt: string }[]).map((e) => ({
+    return (
+      JSON.parse(raw) as {
+        analyzed: string[]
+        skipped: (SkippedEntry | string)[]
+        analyzedAt: string
+      }[]
+    ).map((e) => ({
       analyzed: e.analyzed ?? [],
-      skipped: e.skipped ?? [],
+      skipped: (e.skipped ?? []).map((s) =>
+        typeof s === 'string' ? { path: s, duplicateOf: '不明' } : s,
+      ),
       analyzedAt: new Date(e.analyzedAt),
     }))
   } catch {
@@ -33,13 +46,14 @@ function loadLog(): AnalysisEntry[] {
   }
 }
 
-function loadSeenHashes(): Set<string> {
+// Map<hash, filePath> — hash で重複検知し、値として初回解析時のパスを保持
+function loadSeenHashes(): Map<string, string> {
   try {
     const raw = localStorage.getItem(HASHES_KEY)
-    if (!raw) return new Set()
-    return new Set(JSON.parse(raw) as string[])
+    if (!raw) return new Map()
+    return new Map(JSON.parse(raw) as [string, string][])
   } catch {
-    return new Set()
+    return new Map()
   }
 }
 
@@ -58,19 +72,19 @@ export default function App() {
   const { status, stats, error, rowCount, analyze, clear } = useDuckDB()
   const [analysisLog, setAnalysisLog] = useState<AnalysisEntry[]>(loadLog)
   const [watchDirHandle, setWatchDirHandle] = useState<FileSystemDirectoryHandle | null>(null)
-  const seenHashesRef = useRef<Set<string>>(loadSeenHashes())
+  const seenHashesRef = useRef<Map<string, string>>(loadSeenHashes())
   const opfsAvailable = isOpfsAvailable()
 
-  function addEntry(analyzed: string[], skipped: string[]) {
+  function addEntry(analyzed: string[], skipped: SkippedEntry[]) {
     setAnalysisLog((prev) => [...prev, { analyzed, skipped, analyzedAt: new Date() }])
   }
 
-  function handleLoad(texts: string[], paths: string[], skipped: string[]) {
+  function handleLoad(texts: string[], paths: string[], skipped: SkippedEntry[]) {
     addEntry(paths, skipped)
     if (texts.length > 0) analyze(texts)
   }
 
-  const handleNewFiles = useCallback((texts: string[], paths: string[], skipped: string[]) => {
+  const handleNewFiles = useCallback((texts: string[], paths: string[], skipped: SkippedEntry[]) => {
     addEntry(paths, skipped)
     if (texts.length > 0) analyze(texts)
   }, [analyze])
@@ -155,9 +169,12 @@ export default function App() {
                               {f}
                             </li>
                           ))}
-                          {entry.skipped.map((f) => (
-                            <li key={f} className="text-xs font-mono text-muted-foreground pl-3">
-                              {f} <span className="text-yellow-600">（スキップ済み）</span>
+                          {entry.skipped.map((s) => (
+                            <li key={s.path} className="text-xs font-mono text-muted-foreground pl-3">
+                              {s.path}
+                              <span className="text-yellow-600 not-italic ml-1">
+                                （スキップ: {s.duplicateOf} と同一）
+                              </span>
                             </li>
                           ))}
                         </ul>

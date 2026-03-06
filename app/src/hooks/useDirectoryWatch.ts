@@ -1,12 +1,13 @@
 import { type RefObject, useEffect, useRef } from 'react'
 import { collectLogFiles } from '../lib/fsUtils'
+import type { SkippedEntry } from '../App'
 
 const POLL_INTERVAL_MS = 10_000
 
 export function useDirectoryWatch(
   dirHandle: FileSystemDirectoryHandle | null,
-  seenHashesRef: RefObject<Set<string>>,
-  onNewFiles: (texts: string[], names: string[], skipped: string[]) => void,
+  seenHashesRef: RefObject<Map<string, string>>,
+  onNewFiles: (texts: string[], names: string[], skipped: SkippedEntry[]) => void,
 ) {
   const seenModifiedRef = useRef<Map<string, number>>(new Map())
   const callbackRef = useRef(onNewFiles)
@@ -31,13 +32,19 @@ export function useDirectoryWatch(
       })
       if (changedFiles.length > 0) {
         changedFiles.forEach((f) => seenModifiedRef.current.set(f.path, f.lastModified))
-        const newFiles = changedFiles.filter((f) => !seenHashesRef.current.has(f.hash))
-        const skippedFiles = changedFiles.filter((f) => seenHashesRef.current.has(f.hash))
-        newFiles.forEach((f) => seenHashesRef.current.add(f.hash))
+        const seen = seenHashesRef.current
+        const newFiles = changedFiles.filter((f) => !seen.has(f.hash))
+        const skippedFiles: SkippedEntry[] = changedFiles
+          .filter((f) => seen.has(f.hash))
+          .map((f) => ({
+            path: `${dirHandle.name}/${f.path}`,
+            duplicateOf: seen.get(f.hash)!,
+          }))
+        newFiles.forEach((f) => seen.set(f.hash, `${dirHandle.name}/${f.path}`))
         callbackRef.current(
           newFiles.map((f) => f.text),
           newFiles.map((f) => `${dirHandle.name}/${f.path}`),
-          skippedFiles.map((f) => `${dirHandle.name}/${f.path}`),
+          skippedFiles,
         )
       }
     }

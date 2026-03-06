@@ -1,13 +1,14 @@
 import type { RefObject } from 'react'
 import { Button } from '@/components/ui/button'
 import { collectLogFiles } from '../lib/fsUtils'
+import type { SkippedEntry } from '../App'
 
 interface Props {
-  onLoad: (texts: string[], fileNames: string[], skipped: string[]) => void
+  onLoad: (texts: string[], fileNames: string[], skipped: SkippedEntry[]) => void
   onWatchDir?: (handle: FileSystemDirectoryHandle) => void
   disabled: boolean
   label?: string
-  seenHashesRef: RefObject<Set<string>>
+  seenHashesRef: RefObject<Map<string, string>>
 }
 
 export function FilePicker({ onLoad, onWatchDir, disabled, label, seenHashesRef }: Props) {
@@ -20,12 +21,14 @@ export function FilePicker({ onLoad, onWatchDir, disabled, label, seenHashesRef 
     }
     const seen = seenHashesRef.current
     const newFiles = results.filter((r) => !seen.has(r.hash))
-    const skippedFiles = results.filter((r) => seen.has(r.hash))
-    newFiles.forEach((r) => seen.add(r.hash))
+    const skippedFiles: SkippedEntry[] = results
+      .filter((r) => seen.has(r.hash))
+      .map((r) => ({ path: `${dirHandle.name}/${r.path}`, duplicateOf: seen.get(r.hash)! }))
+    newFiles.forEach((r) => seen.set(r.hash, `${dirHandle.name}/${r.path}`))
     onLoad(
       newFiles.map((r) => r.text),
       newFiles.map((r) => `${dirHandle.name}/${r.path}`),
-      skippedFiles.map((r) => `${dirHandle.name}/${r.path}`),
+      skippedFiles,
     )
     onWatchDir?.(dirHandle)
   }
