@@ -18,17 +18,17 @@ interface Props {
 
 export function StatsCards({ stats }: Props) {
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
       {[
         { label: 'Total Requests', value: fmt(stats.totalRequests) },
         { label: 'Unique IPs', value: fmt(stats.uniqueIps) },
         { label: 'Error Rate', value: `${stats.errorRate}%` },
         { label: 'Data Transferred', value: fmtBytes(stats.totalBytes) },
       ].map(({ label, value }) => (
-        <Card key={label}>
-          <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground mb-1">{label}</p>
-            <p className="text-2xl font-bold">{value}</p>
+        <Card key={label} className="py-0 gap-0">
+          <CardContent className="pt-3 pb-3">
+            <p className="text-xs text-muted-foreground mb-0.5">{label}</p>
+            <p className="text-xl font-bold">{value}</p>
           </CardContent>
         </Card>
       ))}
