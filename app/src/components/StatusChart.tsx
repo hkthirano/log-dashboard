@@ -1,3 +1,4 @@
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import type { Stats } from '../types/log'
 
@@ -13,35 +14,41 @@ function statusColor(s: number) {
 }
 
 export function StatusChart({ statusCodes }: Props) {
-  const total = statusCodes.reduce((a, b) => a + b.count, 0)
+  const data = statusCodes.map((s) => ({ name: String(s.status), value: s.count }))
+
   return (
     <Card>
       <CardHeader>
         <CardTitle>ステータスコード</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="flex h-4 rounded-full overflow-hidden mb-4">
-          {statusCodes.map((s) => (
-            <div
-              key={s.status}
-              className="h-full min-w-[2px] transition-opacity hover:opacity-80"
-              style={{ width: `${(s.count / total) * 100}%`, background: statusColor(s.status) }}
-              title={`${s.status}: ${s.count.toLocaleString()}`}
+        <ResponsiveContainer width="100%" height={220}>
+          <PieChart>
+            <Pie
+              data={data}
+              cx="50%"
+              cy="50%"
+              innerRadius="55%"
+              outerRadius="80%"
+              paddingAngle={2}
+              dataKey="value"
+            >
+              {statusCodes.map((s) => (
+                <Cell key={s.status} fill={statusColor(s.status)} />
+              ))}
+            </Pie>
+            <Tooltip
+              contentStyle={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: 6, fontSize: 12 }}
+              labelStyle={{ color: '#ccc' }}
+              formatter={(value: number | undefined) => [(value ?? 0).toLocaleString(), 'リクエスト数']}
             />
-          ))}
-        </div>
-        <div className="flex flex-col gap-1.5">
-          {statusCodes.map((s) => (
-            <div key={s.status} className="flex items-center gap-2 text-sm">
-              <span
-                className="w-2.5 h-2.5 rounded-full shrink-0"
-                style={{ background: statusColor(s.status) }}
-              />
-              <span>{s.status}</span>
-              <span className="ml-auto text-muted-foreground">{s.count.toLocaleString()}</span>
-            </div>
-          ))}
-        </div>
+            <Legend
+              iconType="circle"
+              iconSize={8}
+              formatter={(value) => <span style={{ color: '#aaa', fontSize: 12 }}>{value}</span>}
+            />
+          </PieChart>
+        </ResponsiveContainer>
       </CardContent>
     </Card>
   )

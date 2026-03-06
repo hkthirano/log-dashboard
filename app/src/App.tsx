@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { FilePicker } from './components/FilePicker'
 import { StatsCards } from './components/StatsCards'
+import { RequestsChart } from './components/RequestsChart'
 import { TopPaths } from './components/TopPaths'
 import { StatusChart } from './components/StatusChart'
 import { useDuckDB } from './hooks/useDuckDB'
@@ -215,6 +216,7 @@ export default function App() {
             {stats && (
               <>
                 <StatsCards stats={stats} />
+                <RequestsChart requestsPerHour={stats.requestsPerHour} />
                 <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr] gap-4">
                   <TopPaths topPaths={stats.topPaths} />
                   <StatusChart statusCodes={stats.statusCodes} />
