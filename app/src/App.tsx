@@ -13,6 +13,7 @@ import { isOpfsAvailable } from './lib/duckdb'
 import { exportPdf } from './lib/export'
 import { saveWatchHandles, loadWatchHandles, clearWatchHandles } from './lib/watchHandleStore'
 import { downloadNewLog } from './lib/sampleLog'
+import { pickAndLoad } from './lib/folderPicker'
 
 export interface SkippedEntry {
   path: string
@@ -127,13 +128,8 @@ export default function App() {
     setPendingHandle(null)
   }
 
-  async function handleReconnect(handle: FileSystemDirectoryHandle) {
-    try {
-      const perm = await handle.requestPermission({ mode: 'read' })
-      if (perm === 'granted') addWatchHandle(handle)
-    } catch {
-      // User cancelled — do nothing
-    }
+  async function handleReconnect() {
+    await pickAndLoad(seenHashesRef, handleLoad, addWatchHandle)
   }
 
   function handleRemoveWatch() {
@@ -173,7 +169,7 @@ export default function App() {
       <button onClick={handleRemoveWatch} className="ml-0.5 opacity-60 hover:opacity-100 leading-none" aria-label={`Stop monitoring ${watchDirHandle.name}`}>×</button>
     </Badge>
   ) : pendingHandle ? (
-    <Badge variant="outline" className="text-yellow-400 border-yellow-800 bg-yellow-950 gap-1.5 cursor-pointer hover:bg-yellow-900" onClick={() => handleReconnect(pendingHandle)}>
+    <Badge variant="outline" className="text-yellow-400 border-yellow-800 bg-yellow-950 gap-1.5 cursor-pointer hover:bg-yellow-900" onClick={() => handleReconnect()}>
       <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
       Reconnect: {pendingHandle.name}
       <button onClick={(e) => { e.stopPropagation(); handleRemoveWatch() }} className="ml-0.5 opacity-60 hover:opacity-100 leading-none" aria-label={`Remove ${pendingHandle.name}`}>×</button>
@@ -280,7 +276,7 @@ export default function App() {
                 <Badge
                   variant="outline"
                   className="text-yellow-400 border-yellow-800 bg-yellow-950 gap-1.5 cursor-pointer hover:bg-yellow-900 px-3 py-1.5 text-sm"
-                  onClick={() => handleReconnect(pendingHandle)}
+                  onClick={() => handleReconnect()}
                 >
                   <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
                   Reconnect: {pendingHandle.name}
