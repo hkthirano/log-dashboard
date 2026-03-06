@@ -109,7 +109,7 @@ export async function loadLogs(entries: LogEntry[]): Promise<void> {
     ip: e.ip,
     identity: e.identity,
     user: e.user,
-    ts: isNaN(e.timestamp.getTime()) ? null : e.timestamp.toISOString(),
+    ts: isNaN(e.timestamp.getTime()) ? null : e.timestamp.toISOString().replace('T', ' ').slice(0, 23),
     method: e.method,
     path: e.path,
     protocol: e.protocol,
