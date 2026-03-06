@@ -74,7 +74,7 @@ function fmtDate(d: Date) {
 }
 
 export default function App() {
-  const { status, stats, error, rowCount, analyze, clear } = useDuckDB()
+  const { status, stats, error, analyze, clear } = useDuckDB()
   const [analysisLog, setAnalysisLog] = useState<AnalysisEntry[]>(loadLog)
   // Active monitored folder handle
   const [watchDirHandle, setWatchDirHandle] = useState<FileSystemDirectoryHandle | null>(null)
@@ -200,7 +200,6 @@ export default function App() {
         ) : isDone ? (
           <div>
             <div className="flex items-center gap-2 mb-4 text-sm text-muted-foreground flex-wrap">
-              <span className="mr-1">{rowCount.toLocaleString()} requests</span>
               {watchBadge}
               <div className="ml-auto flex items-center gap-2">
                 <Button variant="secondary" size="sm" onClick={handleClear}>Clear data</Button>
