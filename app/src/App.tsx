@@ -93,12 +93,18 @@ export default function App() {
             {analysisLog.length > 0 && (
               <Card className="mb-4">
                 <CardContent className="pt-4 pb-3">
-                  <p className="text-xs font-medium text-muted-foreground mb-2">解析ログ</p>
-                  <div className="flex flex-col gap-2 max-h-36 overflow-y-auto">
+                  <p className="text-xs font-medium text-muted-foreground mb-3">解析ログ</p>
+                  <div className="flex flex-col gap-3 max-h-48 overflow-y-auto">
                     {analysisLog.map((entry, i) => (
-                      <div key={i} className="text-xs">
-                        <span className="text-muted-foreground tabular-nums mr-2">{fmtDate(entry.analyzedAt)}</span>
-                        <span className="font-mono text-foreground/80">{entry.files.join(', ')}</span>
+                      <div key={i}>
+                        <p className="text-xs text-muted-foreground tabular-nums mb-1">{fmtDate(entry.analyzedAt)}</p>
+                        <ul className="flex flex-col gap-0.5">
+                          {entry.files.map((f) => (
+                            <li key={f} className="text-xs font-mono text-foreground/80 pl-3">
+                              {f}
+                            </li>
+                          ))}
+                        </ul>
                       </div>
                     ))}
                   </div>
