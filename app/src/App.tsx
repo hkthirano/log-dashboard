@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
@@ -11,22 +11,35 @@ import { useDirectoryWatch } from './hooks/useDirectoryWatch'
 import { isOpfsAvailable } from './lib/duckdb'
 
 interface AnalysisEntry {
-  files: string[]
+  analyzed: string[]
+  skipped: string[]
   analyzedAt: Date
 }
 
 const STORAGE_KEY = 'log-dashboard:analysis-log'
+const HASHES_KEY = 'log-dashboard:seen-hashes'
 
 function loadLog(): AnalysisEntry[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return []
-    return (JSON.parse(raw) as { files: string[]; analyzedAt: string }[]).map((e) => ({
-      files: e.files,
+    return (JSON.parse(raw) as { analyzed: string[]; skipped: string[]; analyzedAt: string }[]).map((e) => ({
+      analyzed: e.analyzed ?? [],
+      skipped: e.skipped ?? [],
       analyzedAt: new Date(e.analyzedAt),
     }))
   } catch {
     return []
+  }
+}
+
+function loadSeenHashes(): Set<string> {
+  try {
+    const raw = localStorage.getItem(HASHES_KEY)
+    if (!raw) return new Set()
+    return new Set(JSON.parse(raw) as string[])
+  } catch {
+    return new Set()
   }
 }
 
@@ -45,16 +58,21 @@ export default function App() {
   const { status, stats, error, rowCount, analyze, clear } = useDuckDB()
   const [analysisLog, setAnalysisLog] = useState<AnalysisEntry[]>(loadLog)
   const [watchDirHandle, setWatchDirHandle] = useState<FileSystemDirectoryHandle | null>(null)
+  const seenHashesRef = useRef<Set<string>>(loadSeenHashes())
   const opfsAvailable = isOpfsAvailable()
 
-  function handleLoad(texts: string[], paths: string[]) {
-    setAnalysisLog((prev) => [...prev, { files: paths, analyzedAt: new Date() }])
-    analyze(texts)
+  function addEntry(analyzed: string[], skipped: string[]) {
+    setAnalysisLog((prev) => [...prev, { analyzed, skipped, analyzedAt: new Date() }])
   }
 
-  const handleNewFiles = useCallback((texts: string[], paths: string[]) => {
-    setAnalysisLog((prev) => [...prev, { files: paths, analyzedAt: new Date() }])
-    analyze(texts)
+  function handleLoad(texts: string[], paths: string[], skipped: string[]) {
+    addEntry(paths, skipped)
+    if (texts.length > 0) analyze(texts)
+  }
+
+  const handleNewFiles = useCallback((texts: string[], paths: string[], skipped: string[]) => {
+    addEntry(paths, skipped)
+    if (texts.length > 0) analyze(texts)
   }, [analyze])
 
   async function handleSetWatch() {
@@ -65,6 +83,8 @@ export default function App() {
   function handleClear() {
     setWatchDirHandle(null)
     setAnalysisLog([])
+    seenHashesRef.current.clear()
+    localStorage.removeItem(HASHES_KEY)
     clear()
   }
 
@@ -72,7 +92,11 @@ export default function App() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(analysisLog))
   }, [analysisLog])
 
-  useDirectoryWatch(watchDirHandle, handleNewFiles)
+  useEffect(() => {
+    localStorage.setItem(HASHES_KEY, JSON.stringify([...seenHashesRef.current]))
+  }, [analysisLog])
+
+  useDirectoryWatch(watchDirHandle, seenHashesRef, handleNewFiles)
 
   const isLoading = ['initializing', 'parsing', 'loading', 'querying'].includes(status)
   const isDone = status === 'done'
@@ -107,7 +131,7 @@ export default function App() {
                 </Badge>
               )}
               <div className="ml-auto flex items-center gap-2">
-                <FilePicker onLoad={handleLoad} onWatchDir={setWatchDirHandle} disabled={false} label="追加読み込み" />
+                <FilePicker onLoad={handleLoad} onWatchDir={setWatchDirHandle} disabled={false} label="追加読み込み" seenHashesRef={seenHashesRef} />
                 <Button variant="outline" size="sm" onClick={handleSetWatch}>
                   監視フォルダを設定
                 </Button>
@@ -126,9 +150,14 @@ export default function App() {
                       <div key={i}>
                         <p className="text-xs text-muted-foreground tabular-nums mb-1">{fmtDate(entry.analyzedAt)}</p>
                         <ul className="flex flex-col gap-0.5">
-                          {entry.files.map((f) => (
+                          {entry.analyzed.map((f) => (
                             <li key={f} className="text-xs font-mono text-foreground/80 pl-3">
                               {f}
+                            </li>
+                          ))}
+                          {entry.skipped.map((f) => (
+                            <li key={f} className="text-xs font-mono text-muted-foreground pl-3">
+                              {f} <span className="text-yellow-600">（スキップ済み）</span>
                             </li>
                           ))}
                         </ul>
@@ -151,7 +180,7 @@ export default function App() {
           </div>
         ) : isIdle ? (
           <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
-            <FilePicker onLoad={handleLoad} onWatchDir={setWatchDirHandle} disabled={false} />
+            <FilePicker onLoad={handleLoad} onWatchDir={setWatchDirHandle} disabled={false} seenHashesRef={seenHashesRef} />
             {error && <p className="text-destructive text-sm">{error}</p>}
           </div>
         ) : null}

@@ -1,14 +1,16 @@
+import type { RefObject } from 'react'
 import { Button } from '@/components/ui/button'
 import { collectLogFiles } from '../lib/fsUtils'
 
 interface Props {
-  onLoad: (texts: string[], fileNames: string[]) => void
+  onLoad: (texts: string[], fileNames: string[], skipped: string[]) => void
   onWatchDir?: (handle: FileSystemDirectoryHandle) => void
   disabled: boolean
   label?: string
+  seenHashesRef: RefObject<Set<string>>
 }
 
-export function FilePicker({ onLoad, onWatchDir, disabled, label }: Props) {
+export function FilePicker({ onLoad, onWatchDir, disabled, label, seenHashesRef }: Props) {
   async function pickDirectory() {
     const dirHandle = await window.showDirectoryPicker()
     const results = await collectLogFiles(dirHandle)
@@ -16,7 +18,15 @@ export function FilePicker({ onLoad, onWatchDir, disabled, label }: Props) {
       alert('フォルダ内に .log / .txt ファイルが見つかりませんでした')
       return
     }
-    onLoad(results.map((r) => r.text), results.map((r) => `${dirHandle.name}/${r.path}`))
+    const seen = seenHashesRef.current
+    const newFiles = results.filter((r) => !seen.has(r.hash))
+    const skippedFiles = results.filter((r) => seen.has(r.hash))
+    newFiles.forEach((r) => seen.add(r.hash))
+    onLoad(
+      newFiles.map((r) => r.text),
+      newFiles.map((r) => `${dirHandle.name}/${r.path}`),
+      skippedFiles.map((r) => `${dirHandle.name}/${r.path}`),
+    )
     onWatchDir?.(dirHandle)
   }
 
