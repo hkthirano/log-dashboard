@@ -160,26 +160,37 @@ export default function App() {
                 <CardContent className="pt-4 pb-3">
                   <p className="text-xs font-medium text-muted-foreground mb-3">解析ログ</p>
                   <div className="flex flex-col gap-3 max-h-48 overflow-y-auto">
-                    {analysisLog.map((entry, i) => (
-                      <div key={i}>
-                        <p className="text-xs text-muted-foreground tabular-nums mb-1">{fmtDate(entry.analyzedAt)}</p>
-                        <ul className="flex flex-col gap-0.5">
-                          {entry.analyzed.map((f) => (
-                            <li key={f} className="text-xs font-mono text-foreground/80 pl-3">
-                              {f}
-                            </li>
-                          ))}
-                          {entry.skipped.map((s) => (
-                            <li key={s.path} className="text-xs font-mono text-muted-foreground pl-3">
-                              {s.path}
-                              <span className="text-yellow-600 not-italic ml-1">
-                                （スキップ: {s.duplicateOf} と同一）
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    ))}
+                    {(() => {
+                      // 全エントリを通じて解析済みファイルに連番を付与
+                      const fileIds = new Map<string, number>()
+                      let counter = 0
+                      for (const entry of analysisLog) {
+                        for (const f of entry.analyzed) fileIds.set(f, ++counter)
+                      }
+                      return analysisLog.map((entry, i) => (
+                        <div key={i}>
+                          <p className="text-xs text-muted-foreground tabular-nums mb-1">{fmtDate(entry.analyzedAt)}</p>
+                          <ul className="flex flex-col gap-0.5">
+                            {entry.analyzed.map((f) => (
+                              <li key={f} className="text-xs font-mono text-foreground/80 pl-3">
+                                <span className="text-muted-foreground mr-1.5">#{fileIds.get(f)}</span>{f}
+                              </li>
+                            ))}
+                            {entry.skipped.map((s) => {
+                              const dupId = fileIds.get(s.duplicateOf)
+                              return (
+                                <li key={s.path} className="text-xs font-mono text-muted-foreground pl-3">
+                                  {s.path}
+                                  <span className="text-yellow-600 ml-1">
+                                    （スキップ: #{dupId} と同一）
+                                  </span>
+                                </li>
+                              )
+                            })}
+                          </ul>
+                        </div>
+                      ))
+                    })()}
                   </div>
                 </CardContent>
               </Card>
