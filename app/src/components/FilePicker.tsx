@@ -16,7 +16,7 @@ export function FilePicker({ onLoad, onWatchDir, disabled, label }: Props) {
       alert('フォルダ内に .log / .txt ファイルが見つかりませんでした')
       return
     }
-    onLoad(results.map((r) => r.text), results.map((r) => r.name))
+    onLoad(results.map((r) => r.text), results.map((r) => `${dirHandle.name}/${r.path}`))
     onWatchDir?.(dirHandle)
   }
 

@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Card, CardContent } from '@/components/ui/card'
 import { FilePicker } from './components/FilePicker'
 import { StatsCards } from './components/StatsCards'
 import { TopPaths } from './components/TopPaths'
@@ -9,6 +10,11 @@ import { useDuckDB } from './hooks/useDuckDB'
 import { useDirectoryWatch } from './hooks/useDirectoryWatch'
 import { isOpfsAvailable } from './lib/duckdb'
 
+interface AnalysisEntry {
+  files: string[]
+  analyzedAt: Date
+}
+
 const STATUS_LABEL: Record<string, string> = {
   initializing: 'データを確認中...',
   parsing: 'ログを解析中...',
@@ -16,24 +22,29 @@ const STATUS_LABEL: Record<string, string> = {
   querying: '集計クエリ実行中...',
 }
 
+function fmtDate(d: Date) {
+  return d.toLocaleString('ja-JP', { dateStyle: 'short', timeStyle: 'medium' })
+}
+
 export default function App() {
   const { status, stats, error, rowCount, analyze, clear } = useDuckDB()
-  const [fileNames, setFileNames] = useState<string[]>([])
+  const [analysisLog, setAnalysisLog] = useState<AnalysisEntry[]>([])
   const [watchDirHandle, setWatchDirHandle] = useState<FileSystemDirectoryHandle | null>(null)
   const opfsAvailable = isOpfsAvailable()
 
-  function handleLoad(texts: string[], names: string[]) {
-    setFileNames(names)
+  function handleLoad(texts: string[], paths: string[]) {
+    setAnalysisLog([{ files: paths, analyzedAt: new Date() }])
     analyze(texts)
   }
 
-  const handleNewFiles = useCallback((texts: string[], names: string[]) => {
-    setFileNames((prev) => [...new Set([...prev, ...names])])
+  const handleNewFiles = useCallback((texts: string[], paths: string[]) => {
+    setAnalysisLog((prev) => [...prev, { files: paths, analyzedAt: new Date() }])
     analyze(texts)
   }, [analyze])
 
   function handleClear() {
     setWatchDirHandle(null)
+    setAnalysisLog([])
     clear()
   }
 
@@ -63,8 +74,7 @@ export default function App() {
           </div>
         ) : isDone ? (
           <div>
-            <div className="flex items-center gap-3 mb-5 text-sm text-muted-foreground flex-wrap">
-              {fileNames.length > 0 && <span>{fileNames.join(', ')}</span>}
+            <div className="flex items-center gap-3 mb-4 text-sm text-muted-foreground flex-wrap">
               <span>{rowCount.toLocaleString()} 件</span>
               {watchDirHandle && (
                 <Badge variant="outline" className="text-green-400 border-green-800 bg-green-950 gap-1.5">
@@ -79,6 +89,23 @@ export default function App() {
                 </Button>
               </div>
             </div>
+
+            {analysisLog.length > 0 && (
+              <Card className="mb-4">
+                <CardContent className="pt-4 pb-3">
+                  <p className="text-xs font-medium text-muted-foreground mb-2">解析ログ</p>
+                  <div className="flex flex-col gap-2 max-h-36 overflow-y-auto">
+                    {analysisLog.map((entry, i) => (
+                      <div key={i} className="text-xs">
+                        <span className="text-muted-foreground tabular-nums mr-2">{fmtDate(entry.analyzedAt)}</span>
+                        <span className="font-mono text-foreground/80">{entry.files.join(', ')}</span>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {stats && (
               <>
                 <StatsCards stats={stats} />
