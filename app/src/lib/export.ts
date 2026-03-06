@@ -47,6 +47,13 @@ export function exportCsv(stats: Stats) {
   for (const { status, count } of stats.statusCodes) {
     lines.push(`${status},${count}`)
   }
+  lines.push('')
+
+  lines.push('## 時間帯別リクエスト数')
+  lines.push('時間帯,リクエスト数')
+  for (const { hour, count } of stats.requestsPerHour) {
+    lines.push(`${hour},${count}`)
+  }
 
   const bom = '\uFEFF'
   const blob = new Blob([bom + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' })
@@ -118,6 +125,16 @@ export function exportPdf(stats: Stats) {
   y += 4
   for (const { status, count } of stats.statusCodes) {
     addRow(String(status), count.toLocaleString())
+  }
+  y += 4
+
+  // Requests per Hour
+  addSection('Requests per Hour')
+  addRow('Hour', 'Count')
+  doc.line(margin, y, 196, y)
+  y += 4
+  for (const { hour, count } of stats.requestsPerHour) {
+    addRow(hour, count.toLocaleString())
   }
 
   const filename = `log-summary-${new Date().toISOString().slice(0, 10)}.pdf`
