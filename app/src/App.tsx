@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
@@ -15,6 +15,21 @@ interface AnalysisEntry {
   analyzedAt: Date
 }
 
+const STORAGE_KEY = 'log-dashboard:analysis-log'
+
+function loadLog(): AnalysisEntry[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return []
+    return (JSON.parse(raw) as { files: string[]; analyzedAt: string }[]).map((e) => ({
+      files: e.files,
+      analyzedAt: new Date(e.analyzedAt),
+    }))
+  } catch {
+    return []
+  }
+}
+
 const STATUS_LABEL: Record<string, string> = {
   initializing: 'データを確認中...',
   parsing: 'ログを解析中...',
@@ -28,7 +43,7 @@ function fmtDate(d: Date) {
 
 export default function App() {
   const { status, stats, error, rowCount, analyze, clear } = useDuckDB()
-  const [analysisLog, setAnalysisLog] = useState<AnalysisEntry[]>([])
+  const [analysisLog, setAnalysisLog] = useState<AnalysisEntry[]>(loadLog)
   const [watchDirHandle, setWatchDirHandle] = useState<FileSystemDirectoryHandle | null>(null)
   const opfsAvailable = isOpfsAvailable()
 
@@ -47,6 +62,10 @@ export default function App() {
     setAnalysisLog([])
     clear()
   }
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(analysisLog))
+  }, [analysisLog])
 
   useDirectoryWatch(watchDirHandle, handleNewFiles)
 
