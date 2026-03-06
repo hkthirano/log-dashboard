@@ -16,7 +16,7 @@ export function TopPaths({ topPaths }: Props) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>上位 URL</CardTitle>
+        <CardTitle>Top Paths</CardTitle>
       </CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={Math.max(180, data.length * 36)}>
@@ -45,10 +45,10 @@ export function TopPaths({ topPaths }: Props) {
               contentStyle={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: 6, fontSize: 12 }}
               labelFormatter={(_, payload) => payload?.[0]?.payload?.fullPath ?? ''}
               labelStyle={{ color: '#ccc', fontFamily: 'monospace', wordBreak: 'break-all' }}
-              formatter={(value: number | undefined) => [(value ?? 0).toLocaleString(), 'リクエスト数']}
+              formatter={(value: number | undefined) => [(value ?? 0).toLocaleString(), 'Requests']}
               cursor={{ fill: 'rgba(255,255,255,0.04)' }}
             />
-            <Bar dataKey="count" name="リクエスト数" fill="#60a5fa" radius={[0, 3, 3, 0]} maxBarSize={24} />
+            <Bar dataKey="count" name="Requests" fill="#60a5fa" radius={[0, 3, 3, 0]} maxBarSize={24} />
           </BarChart>
         </ResponsiveContainer>
       </CardContent>

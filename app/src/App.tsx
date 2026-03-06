@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
-import { FilePicker } from './components/FilePicker'
+import { FilePickerDropZone } from './components/FilePicker'
 import { StatsCards } from './components/StatsCards'
 import { RequestsChart } from './components/RequestsChart'
 import { TopPaths } from './components/TopPaths'
@@ -10,7 +10,10 @@ import { StatusChart } from './components/StatusChart'
 import { useDuckDB } from './hooks/useDuckDB'
 import { useDirectoryWatch } from './hooks/useDirectoryWatch'
 import { isOpfsAvailable } from './lib/duckdb'
-import { exportCsv, exportPdf } from './lib/export'
+import { exportPdf } from './lib/export'
+import { saveWatchHandles, loadWatchHandles, clearWatchHandles } from './lib/watchHandleStore'
+import { downloadNewLog } from './lib/sampleLog'
+import { pickAndLoad } from './lib/folderPicker'
 
 export interface SkippedEntry {
   path: string
@@ -39,7 +42,7 @@ function loadLog(): AnalysisEntry[] {
     ).map((e) => ({
       analyzed: e.analyzed ?? [],
       skipped: (e.skipped ?? []).map((s) =>
-        typeof s === 'string' ? { path: s, duplicateOf: '不明' } : s,
+        typeof s === 'string' ? { path: s, duplicateOf: 'unknown' } : s,
       ),
       analyzedAt: new Date(e.analyzedAt),
     }))
@@ -48,7 +51,7 @@ function loadLog(): AnalysisEntry[] {
   }
 }
 
-// Map<hash, filePath> — hash で重複検知し、値として初回解析時のパスを保持
+// Map<hash, filePath> — tracks content hashes to deduplicate files
 function loadSeenHashes(): Map<string, string> {
   try {
     const raw = localStorage.getItem(HASHES_KEY)
@@ -60,22 +63,51 @@ function loadSeenHashes(): Map<string, string> {
 }
 
 const STATUS_LABEL: Record<string, string> = {
-  initializing: 'データを確認中...',
-  parsing: 'ログを解析中...',
-  loading: 'DuckDB にロード中...',
-  querying: '集計クエリ実行中...',
+  initializing: 'Initializing...',
+  parsing: 'Parsing logs...',
+  loading: 'Loading into DuckDB...',
+  querying: 'Running queries...',
 }
 
 function fmtDate(d: Date) {
-  return d.toLocaleString('ja-JP', { dateStyle: 'short', timeStyle: 'medium' })
+  return d.toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'medium' })
 }
 
 export default function App() {
   const { status, stats, error, rowCount, analyze, clear } = useDuckDB()
   const [analysisLog, setAnalysisLog] = useState<AnalysisEntry[]>(loadLog)
-  const [watchDirHandles, setWatchDirHandles] = useState<FileSystemDirectoryHandle[]>([])
+  // Active monitored folder handle
+  const [watchDirHandle, setWatchDirHandle] = useState<FileSystemDirectoryHandle | null>(null)
+  // Handle restored from IndexedDB that needs permission re-grant
+  const [pendingHandle, setPendingHandle] = useState<FileSystemDirectoryHandle | null>(null)
   const seenHashesRef = useRef<Map<string, string>>(loadSeenHashes())
   const opfsAvailable = isOpfsAvailable()
+
+  // On mount: restore handle from IndexedDB and check permission
+  useEffect(() => {
+    loadWatchHandles().then(async (handles) => {
+      for (const h of handles) {
+        try {
+          const perm = await h.queryPermission({ mode: 'read' })
+          if (perm === 'granted') {
+            setWatchDirHandle(h)
+            return
+          } else {
+            setPendingHandle(h)
+            return
+          }
+        } catch {
+          // Ignore stale/invalid handles (e.g. deleted folders)
+        }
+      }
+    })
+  }, [])
+
+  // Persist handle to IndexedDB whenever it changes
+  useEffect(() => {
+    const handles = [watchDirHandle, pendingHandle].filter(Boolean) as FileSystemDirectoryHandle[]
+    saveWatchHandles(handles)
+  }, [watchDirHandle, pendingHandle])
 
   function addEntry(analyzed: string[], skipped: SkippedEntry[]) {
     setAnalysisLog((prev) => [...prev, { analyzed, skipped, analyzedAt: new Date() }])
@@ -91,24 +123,27 @@ export default function App() {
     if (texts.length > 0) analyze(texts)
   }, [analyze])
 
-  async function handleAddWatch() {
-    const dirHandle = await window.showDirectoryPicker()
-    setWatchDirHandles((prev) => {
-      // 同名フォルダの重複追加を防ぐ
-      if (prev.some((h) => h.name === dirHandle.name)) return prev
-      return [...prev, dirHandle]
-    })
+  function addWatchHandle(handle: FileSystemDirectoryHandle) {
+    setWatchDirHandle(handle)
+    setPendingHandle(null)
   }
 
-  function handleRemoveWatch(name: string) {
-    setWatchDirHandles((prev) => prev.filter((h) => h.name !== name))
+  async function handleReconnect() {
+    await pickAndLoad(seenHashesRef, handleLoad, addWatchHandle)
+  }
+
+  function handleRemoveWatch() {
+    setWatchDirHandle(null)
+    setPendingHandle(null)
   }
 
   function handleClear() {
-    setWatchDirHandles([])
+    setWatchDirHandle(null)
+    setPendingHandle(null)
     setAnalysisLog([])
     seenHashesRef.current.clear()
     localStorage.removeItem(HASHES_KEY)
+    clearWatchHandles()
     clear()
   }
 
@@ -120,20 +155,38 @@ export default function App() {
     localStorage.setItem(HASHES_KEY, JSON.stringify([...seenHashesRef.current]))
   }, [analysisLog])
 
-  useDirectoryWatch(watchDirHandles, seenHashesRef, handleNewFiles)
+  useDirectoryWatch(watchDirHandle, seenHashesRef, handleNewFiles)
 
   const isLoading = ['initializing', 'parsing', 'loading', 'querying'].includes(status)
   const isDone = status === 'done'
   const isIdle = status === 'idle' || status === 'error'
 
+  const watchBadge = watchDirHandle ? (
+    <Badge variant="outline" className="text-green-400 border-green-800 bg-green-950 gap-1.5">
+      <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+      {watchDirHandle.name}
+      <button onClick={handleRemoveWatch} className="ml-0.5 opacity-60 hover:opacity-100 leading-none" aria-label={`Stop monitoring ${watchDirHandle.name}`}>×</button>
+    </Badge>
+  ) : pendingHandle ? (
+    <Badge variant="outline" className="text-yellow-400 border-yellow-800 bg-yellow-950 gap-1.5 cursor-pointer hover:bg-yellow-900" onClick={() => handleReconnect()}>
+      <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
+      Reconnect: {pendingHandle.name}
+      <button onClick={(e) => { e.stopPropagation(); handleRemoveWatch() }} className="ml-0.5 opacity-60 hover:opacity-100 leading-none" aria-label={`Remove ${pendingHandle.name}`}>×</button>
+    </Badge>
+  ) : null
+
   return (
     <div className="max-w-[1200px] mx-auto px-4 py-6">
       <header className="mb-8">
         <h1 className="text-2xl font-bold">Log Dashboard</h1>
-        <p className="text-sm text-muted-foreground mt-1">Apache アクセスログ解析ツール（ブラウザ完結）</p>
+        <p className="text-sm text-muted-foreground mt-1">Apache access log analyzer — runs entirely in your browser</p>
+        <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2">
+          <p className="text-xs text-muted-foreground">Your files are never uploaded — all analysis happens locally.</p>
+          <p className="text-xs text-muted-foreground">Analyzed data is stored in your browser, so reloading the page is safe.</p>
+        </div>
         {!opfsAvailable && (
           <p className="text-yellow-500 text-xs mt-2">
-            ⚠ Cross-Origin Isolated ではないため、データはリロード後に消えます。
+            ⚠ Not Cross-Origin Isolated — data will be lost on page reload.
           </p>
         )}
       </header>
@@ -146,39 +199,31 @@ export default function App() {
           </div>
         ) : isDone ? (
           <div>
-            <div className="flex items-center gap-3 mb-4 text-sm text-muted-foreground flex-wrap">
-              <span>{rowCount.toLocaleString()} 件</span>
-              {watchDirHandles.map((h) => (
-                <Badge key={h.name} variant="outline" className="text-green-400 border-green-800 bg-green-950 gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-                  監視中: {h.name}
-                  <button
-                    onClick={() => handleRemoveWatch(h.name)}
-                    className="ml-0.5 opacity-60 hover:opacity-100 leading-none"
-                    aria-label={`${h.name} の監視を解除`}
-                  >
-                    ×
-                  </button>
-                </Badge>
-              ))}
+            <div className="flex items-center gap-2 mb-4 text-sm text-muted-foreground flex-wrap">
+              <span className="mr-1">{rowCount.toLocaleString()} requests</span>
+              {watchBadge}
               <div className="ml-auto flex items-center gap-2">
-                <FilePicker onLoad={handleLoad} onWatchDir={(h) => setWatchDirHandles((prev) => prev.some((p) => p.name === h.name) ? prev : [...prev, h])} disabled={false} label="追加読み込み" seenHashesRef={seenHashesRef} />
-                <Button variant="outline" size="sm" onClick={handleAddWatch}>
-                  監視フォルダを追加
-                </Button>
-                <Button variant="secondary" size="sm" onClick={handleClear}>
-                  データを消去
-                </Button>
+                <Button variant="secondary" size="sm" onClick={handleClear}>Clear data</Button>
+                <Button variant="outline" size="sm" onClick={() => exportPdf(stats!)}>Download PDF</Button>
               </div>
             </div>
+
+            {watchDirHandle && (
+              <div className="flex items-center gap-2 mb-4 p-3 rounded-lg border border-border bg-card text-xs text-muted-foreground flex-wrap">
+                <Button variant="outline" size="sm" className="h-6 text-xs px-2 shrink-0" onClick={downloadNewLog}>
+                  Download new log
+                </Button>
+                <span>Move it into <span className="font-mono text-foreground">{watchDirHandle.name}/</span> — it will be picked up automatically within 10 seconds.</span>
+              </div>
+            )}
 
             {analysisLog.length > 0 && (
               <Card className="mb-4">
                 <CardContent className="pt-4 pb-3">
-                  <p className="text-xs font-medium text-muted-foreground mb-3">解析ログ</p>
+                  <p className="text-xs font-medium text-muted-foreground mb-3">Analysis log</p>
                   <div className="flex flex-col gap-3 max-h-48 overflow-y-auto">
                     {(() => {
-                      // 全エントリを通じて解析済みファイルに連番を付与
+                      // Assign sequential IDs to analyzed files across all entries
                       const fileIds = new Map<string, number>()
                       let counter = 0
                       for (const entry of analysisLog) {
@@ -198,9 +243,7 @@ export default function App() {
                               return (
                                 <li key={s.path} className="text-xs font-mono text-muted-foreground pl-3">
                                   {s.path}
-                                  <span className="text-yellow-600 ml-1">
-                                    （スキップ: #{dupId} と同一）
-                                  </span>
+                                  <span className="text-yellow-600 ml-1">(skipped: same content as #{dupId})</span>
                                 </li>
                               )
                             })}
@@ -221,20 +264,25 @@ export default function App() {
                   <TopPaths topPaths={stats.topPaths} />
                   <StatusChart statusCodes={stats.statusCodes} />
                 </div>
-                <div className="flex justify-end gap-2 mt-4">
-                  <Button variant="outline" size="sm" onClick={() => exportCsv(stats)}>
-                    CSV ダウンロード
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => exportPdf(stats)}>
-                    PDF ダウンロード
-                  </Button>
-                </div>
               </>
             )}
           </div>
         ) : isIdle ? (
-          <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
-            <FilePicker onLoad={handleLoad} onWatchDir={(h) => setWatchDirHandles((prev) => prev.some((p) => p.name === h.name) ? prev : [...prev, h])} disabled={false} seenHashesRef={seenHashesRef} />
+          <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6">
+            {pendingHandle && (
+              <div className="flex flex-col items-center gap-3">
+                <p className="text-sm text-muted-foreground">Re-grant access to previously monitored folder</p>
+                <Badge
+                  variant="outline"
+                  className="text-yellow-400 border-yellow-800 bg-yellow-950 gap-1.5 cursor-pointer hover:bg-yellow-900 px-3 py-1.5 text-sm"
+                  onClick={() => handleReconnect()}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
+                  Reconnect: {pendingHandle.name}
+                </Badge>
+              </div>
+            )}
+            <FilePickerDropZone onLoad={handleLoad} onWatchDir={addWatchHandle} seenHashesRef={seenHashesRef} />
             {error && <p className="text-destructive text-sm">{error}</p>}
           </div>
         ) : null}

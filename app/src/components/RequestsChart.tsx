@@ -12,7 +12,7 @@ export function RequestsChart({ requestsPerHour }: Props) {
   return (
     <Card className="mb-4">
       <CardHeader>
-        <CardTitle>時間別リクエスト数</CardTitle>
+        <CardTitle>Requests per Hour</CardTitle>
       </CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={220}>
@@ -38,7 +38,7 @@ export function RequestsChart({ requestsPerHour }: Props) {
               itemStyle={{ color: '#a78bfa' }}
               cursor={{ fill: 'rgba(255,255,255,0.04)' }}
             />
-            <Bar dataKey="count" name="リクエスト数" fill="#a78bfa" radius={[3, 3, 0, 0]} maxBarSize={40} />
+            <Bar dataKey="count" name="Requests" fill="#a78bfa" radius={[3, 3, 0, 0]} maxBarSize={40} />
           </BarChart>
         </ResponsiveContainer>
       </CardContent>
