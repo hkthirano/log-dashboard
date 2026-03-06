@@ -105,6 +105,5 @@ export function downloadSampleLogs(): void {
 export function downloadNewLog(): void {
   const now = Date.now()
   const content = generateSampleLog(80, now - 2 * 60 * 60 * 1000, now)
-  const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-')
-  downloadBlob(new Blob([content], { type: 'text/plain' }), `access-${timestamp}.log`)
+  downloadBlob(new Blob([content], { type: 'text/plain' }), `access-${isoDateTime(now)}.log`)
 }
